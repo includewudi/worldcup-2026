@@ -1,194 +1,156 @@
-# 一个人用 AI 写了个世界杯预测系统
+# 为了世界杯竞猜，我 code 了个预测系统
 
-2026 年世界杯还有 365 天。我花了两个晚上，让 AI 给我写了一套完整的预测系统——实时比分、Elo 评分、蒙特卡洛模拟、夺冠概率，还附带一个把比赛塞进 macOS 日历的命令行工具。
+最近各种世界杯竞猜活动满天飞，群里每天都有人在晒战绩。我手痒也参加了几个，然后发现——光靠直觉猜真的会输得很惨。
 
-整套代码已经开源在 GitHub。这篇文章讲讲怎么做的，以及踩了哪些坑。
+于是花了两晚上搓了个工具出来。本来只想给自己查数据用，结果群友看到后有人说「能不能把赛程导到日历里」，有人说「我只支持 Mac」，需求越聊越多，最后就变成了现在这个样子。
 
-## 先看效果
+## 能干什么
 
-系统分前后端，跑在本机两个端口上：
+- **实时比分**：ESPN 数据源，每小时自动同步，小组赛淘汰赛都有
+- **对阵预测**：选两支队，算出每个比分的概率，热力图展示
+- **夺冠模拟**：蒙特卡洛跑一万次，看谁大概率进四强、进决赛
+- **积分榜**：按小组实时更新，已完成比赛高亮
+- **Mac 日历导入**：关注哪支球队，命令行一键导入日历，带时间场馆对阵
 
-- 后端 FastAPI（8570）：预测引擎 + ESPN 数据同步
-- 前端 React + Vite（5570）：八个页面，全中文界面
-
-打开就是总览页：赛事进度、实时积分榜、夺冠热门概率条、Elo 评分 Top 10。
+打开就是总览页，实时积分榜 + 夺冠概率 + Elo 评分一站看完：
 
 ![](../screenshots/01-dashboard.png)
 
-积分榜按小组展示，已完成比赛用绿色边框标记，实时更新：
+积分榜按小组展示，踢完的比赛绿色标记：
 
 ![](../screenshots/02-standings.png)
 
-淘汰赛页面单独做了，24 场对阵按时间排列，场地城市一目了然：
+淘汰赛单独一页，24 场对阵按时间排好：
 
 ![](../screenshots/03-knockout.png)
 
-## 预测引擎：三层模型叠加
+## 预测怎么算的
 
-核心不是调 API 拉数据，而是**自己算**。引擎分三层：
+不是调什么付费 API，是自己算的，三层叠在一起。
 
-**第一层 Elo 评分。** 每支球队有一个 Elo 值，初始值参考 FIFA 排名和历史战绩。每场比赛打完，赢了加分输了扣分，用标准的 Elo 公式：
+### 第一层：Elo 评分
+
+每支队有个 Elo ，参考 FIFA 排名和历史战绩定的初始值。每场踢完按标准 Elo 公式更新：
 
 ```
 R_new = R_old + K × (actual - expected)
 ```
 
-K 值我设的 30，世界杯级别比赛权重更高。expected 用 logistic 函数算，考虑主客场优势（东道主 USA/Mexico/Canada 有 65 分加成）。
+K 值设的 30，世界杯级别权重高一点。expected 用 logistic 函数算，东道主 USA/Mexico/Canada 有 65 分主场加成。
 
-**第二层 Dixon-Coles 泊松模型。** 两队对阵时，预期进球数 λ 用一个对数线性模型：
+### 第二层：Dixon-Coles 泊松
 
-```
-λ_home = α_attack(home) + β_defense(away) + γ_home_advantage
-```
-
-然后泊松分布采样得到比分概率矩阵。这里用 Dixon-Coles 而不是纯泊松，是因为它修正了一个经典问题：0-0 和 1-1 的概率被纯泊松低估了，有个 ρ 参数专门调这个。
-
-**第三层蒙特卡洛模拟。** 从小组赛一路模拟到决赛，跑 10000 次，统计每支球队在每轮被淘汰的概率。这就是总览页那个夺冠概率条的来源。
-
-整个预测引擎大概 600 行 Python，不依赖任何外部预测服务。
-
-## 实时比分：ESPN 单次 API
-
-数据源用的 ESPN，免费、不需要 key、有世界杯数据。
-
-一开始我按天循环调用 API，39 天就 39 个 HTTP 请求。每次同步要跑十几秒，偶尔超时。后来发现 ESPN 支持区间查询：
+两队对阵时，预期进球数 λ 用对数线性模型算：
 
 ```
-https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260611-20260719
+λ_home = α_attack(home) + β_defense(away) + γ_主场优势
 ```
 
-一次请求拿回 100 场比赛的数据，小组赛和淘汰赛都在里面。同步时间从十几秒降到 4 秒。
+然后泊松分布采样得到比分概率矩阵。选 Dixon-Coles 而不是纯泊松，是因为它修了经典问题：0-0 和 1-1 概率被纯泊松低估，有个 ρ 参数专门调这个。
 
-数据格式上有个细节：小组赛的 `altGameNote` 是 "FIFA World Cup, Group A"，淘汰赛只有 "FIFA World Cup"。用这个字段就能区分两种赛制，拆开存储。
+### 第三层：蒙特卡洛
 
-同步频率用的 APScheduler，每小时第 15 分钟触发一次，只在比赛日期间有效。比赛日定义是 ESPN 返回的 events 列表非空。
+从小组赛一路模拟到决赛，跑一万次，统计每支队在每轮被淘汰的概率。总览页那个夺冠概率条就是这么来的。
 
-## 预测对阵页
-
-选两支队伍，立刻算出比分概率矩阵：
+选两队预测的页面长这样：
 
 ![](../screenshots/05-predict.png)
 
-热力图里颜色越深代表那个比分概率越高。最下面还有胜/平/负的三项概率。
-
-## 赛事模拟页
-
-一键跑 10000 次蒙特卡洛，输出夺冠/亚军/四强/十六强概率：
+颜色越深概率越高，底部还有胜平负三项概率。蒙特卡洛模拟页：
 
 ![](../screenshots/06-simulate.png)
 
-## 移动端适配
+## 实时比分怎么搞的
 
-系统在手机上也能用，侧边栏收成抽屉式：
+数据源 ESPN，免费，不要 key，有世界杯数据。
 
-![](../screenshots/07-mobile-home.png)
+一开始按天循环调 API，39 天 39 个请求，同步一次十几秒还老超时。后来发现 ESPN 支持区间查询：
 
-点右上角菜单展开导航：
+```
+site.api.espn.com/.../scoreboard?dates=20260611-20260719
+```
 
-![](../screenshots/08-mobile-menu.png)
+一次请求 100 场比赛全回来，同步时间降到 4 秒。
 
-用了纯 CSS 的 `lg:` 断点，没有引入额外的 UI 库。桌面端侧边栏固定，移动端滑入滑出，React state 管开关，路由变化自动关闭。
+小组赛和淘汰赛的区分靠 altGameNote 字段：小组赛是 "FIFA World Cup, Group A"，淘汰赛只有 "FIFA World Cup"。靠这个拆开存储。
 
-## 命令行工具：关注球队 → 日历
+自动同步用的 APScheduler，每小时第 15 分钟跑一次，只在比赛日有效。
 
-这部分我最满意。写了一个独立的 bash 脚本，不依赖后端：
+## Mac 日历导入：群友点菜做的
 
-```bash
+这个功能是被群友催出来的。有人说「我想在日历里看到巴西的比赛」，有人说「我只用 Mac 日历」，那就做一个。
+
+写了个独立的 bash 脚本，不依赖后端，只要有 ESPN 和 macOS 就能跑：
+
+```
 $ follow_calendar.sh BRA ARG --dry-run
 
 Fetching from ESPN API...
   Fetched + cached successfully
-  Backend prediction system synced
 
-=== 8 matches found (ESPN live data) ===
+=== 8 matches found ===
 
   06/14 Sun 06:00 | 巴西 1-1 摩洛哥 | C组 | MetLife Stadium
   06/17 Wed 09:00 | 阿根廷 3-0 阿尔及利亚 | J组 | Arrowhead Stadium
   06/20 Sat 08:30 | 巴西 3-0 海地 | C组 | Lincoln Financial Field
-  06/23 Tue 01:00 | 阿根廷 2-0 奥地利 | J组 | AT&T Stadium
-  06/25 Thu 06:00 | 苏格兰 0-3 巴西 | C组 | Hard Rock Stadium
-  06/28 Sun 10:00 | 约旦 vs 阿根廷 | J组 | AT&T Stadium
   06/30 Tue 01:00 | 巴西 vs F组第2 | 淘汰赛 | NRG Stadium
-  07/04 Sat 06:00 | 阿根廷 vs H组第2 | 淘汰赛 | Hard Rock Stadium
 
 [DRY RUN] No calendar events created.
 ```
 
-去掉 `--dry-run` 就是真写入 macOS 日历。用 AppleScript 操作 Calendar.app，每个事件带比赛时间、场馆、城市、对阵、比分（如果已踢完）。
+去掉 --dry-run 就是真写入 macOS 日历，AppleScript 操作 Calendar.app，每个事件带时间、场馆、城市、对阵，踢完的还有比分。
 
-几个设计点：
+几个细节：
 
-**中文名映射。** ESPN 返回的是 "Brazil"，日历事件里要显示"巴西"。维护了一个 1KB 的 JSON 映射表，48 支队伍全覆盖。
+- **中文名**：ESPN 返回 "Brazil"，日历里要显示"巴西"，维护了个 1KB 映射表覆盖 48 队
+- **淘汰赛占位符**："Group F 2nd Place" 翻译成"F组第2"
+- **幂等**：同一支队重复导入不会产生重复事件，靠标题+时间去重
+- **离线模式**：加 --cache 用上次缓存的 ESPN 数据，没网也能跑
 
-**淘汰赛占位符。** 淘汰赛对阵在小组赛没打完时是 "Group F 2nd Place" 这种占位符，需要翻译成"F组第2"。小组第三的规则更复杂，"Third Place Group A/B/C/D/F" 被翻译成"小组第3(A/B/C)"。
-
-**幂等。** 同一队可以重复导入，不会产生重复事件。AppleScript 用事件标题 + 开始时间做去重键。
-
-**后端联动。** 脚本启动时尝试 ping 一下后端 `/api/sync/refresh`，触发数据同步。后端没开就跳过，不影响日历导入。30 秒超时保护。
-
-**离线模式。** 加 `--cache` 参数用上次缓存的 ESPN 数据，没网也能跑。
+只支持 Mac 日历。Windows 和手机端的需求暂时没做，如果群里呼声高再说。
 
 ## 关注球队页
 
-网页版也做了关注功能。输入球队名，立刻看到该队所有比赛：
+网页端也做了关注功能，输入队名看该队所有比赛：
 
 ![](../screenshots/04-follow.png)
 
-网页端的关注不走日历，是纯展示。日历导入由命令行工具负责，职责分离。
+网页端纯展示，日历导入交给命令行工具，职责分开。
 
-## 部署架构
+## 手机也能看
 
-整个项目结构：
+本来只做了桌面端，群里有几个人说想在手机上刷。就加了响应式，侧边栏在手机上变成抽屉：
 
-```
-worldcup-2026/
-├── backend/
-│   ├── app/
-│   │   ├── main.py              # FastAPI + APScheduler
-│   │   ├── services/
-│   │   │   ├── predictor.py     # Elo + Dixon-Coles + Monte Carlo
-│   │   │   └── sync_service.py  # ESPN 单次 API
-│   │   └── data/
-│   │       ├── teams.json       # 48 队元数据
-│   │       └── fixtures.json    # 自动生成，gitignored
-│   └── requirements.txt
-├── frontend/
-│   ├── src/
-│   │   ├── components/AppLayout.tsx
-│   │   ├── contexts/SyncContext.tsx
-│   │   └── pages/               # 8 个页面
-│   └── package.json
-└── README.md
-```
+![](../screenshots/07-mobile-home.png)
 
-fixtures.json 不入库，因为它是同步生成的，包含实时比分。teams.json 入库，包含 48 支队伍的初始 Elo、FIFA 排名、所属大洲。
+点右上角菜单展开：
 
-后端用 `.venv/` 隔离依赖，一行命令启动：
+![](../screenshots/08-mobile-menu.png)
 
-```bash
-cd backend && PYTHONPATH=. .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8570
-```
-
-前端标准 Vite：
-
-```bash
-cd frontend && npx vite --port 5570 --host
-```
+纯 CSS 断点搞的，没引额外 UI 库。
 
 ## 踩过的坑
 
-**Python 缓存失效。** 一开始 predictor 里有个 `_fixtures_cache` 变量，同步完数据想清空它，用 `from services.predictor import _fixtures_cache; _fixtures_cache = None`。结果只是重新绑定了局部变量名，模块里的原始变量没变。改成在模块里写 `invalidate_cache()` 函数，用 `global` 声明才解决。
+### Python 缓存失效
 
-**f-string 里的反斜杠。** Python 3.10 不允许 f-string 表达式里出现 `\u`，正则替换 `\g<1>` 在 f-string 里直接报错。解法是把正则的 replacement 部分提到 f-string 外面，用 lambda 替代字符串。
+predictor 里有个模块级变量缓存赛程数据，同步完想清空，用 from import 的方式——结果只重新绑定了局部名，模块里的原始变量没动。改成在模块里写 invalidate_cache() 函数加 global 声明才好。
 
-**ESPN 单次请求的精度。** 100 场比赛在一个 JSON 里，解析时要区分小组赛和淘汰赛。起初用有没有 group 字段判断，后来发现淘汰赛占位符队伍名不稳定，最终用 `altGameNote` 字段更可靠。
+### f-string 反斜杠
 
-## 开源
+Python 3.10 不让 f-string 表达式里出现反斜杠，正则替换 \g<1> 在 f-string 里直接报 SyntaxError。解法是把 replacement 提到 f-string 外面，用 lambda 替代字符串。
 
-代码已经放到 GitHub：
+### ESPN 数据区分
 
-`https://github.com/includewudi/worldcup-2026`
+100 场在一个 JSON 里，一开始靠有没有 group 字段区分小组赛淘汰赛，后来发现淘汰赛占位符不稳定。最终用 altGameNote 字段，靠谱多了。
 
-README 里有完整的部署教程，包括后端、前端、命令行工具三种独立使用方式。命令行工具甚至可以脱离整个系统单独跑，只要有 ESPN API 和 macOS。
+## 开源了
 
-世界杯还有一年，到时候拿这个系统跟朋友打赌应该够用。
+代码放 GitHub 了：
+
+```
+github.com/includewudi/worldcup-2026
+```
+
+README 有完整部署教程，后端、前端、命令行工具三种方式都能单独跑。那个日历导入脚本甚至能脱离整个系统独立用，装上就能跑。
+
+世界杯还有一年，今年竞猜应该不会再输太惨了。
