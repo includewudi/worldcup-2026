@@ -1,6 +1,6 @@
-import { useEffect } from "react";
-import { Outlet, NavLink } from "react-router-dom";
-import { Trophy, Users, Calendar, Target, Dice5, BarChart3, Star, RefreshCw, Crown } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Outlet, NavLink, useLocation } from "react-router-dom";
+import { Trophy, Users, Calendar, Target, Dice5, BarChart3, Star, RefreshCw, Crown, Menu, X } from "lucide-react";
 import clsx from "clsx";
 import { useSync } from "@/contexts/SyncContext";
 
@@ -17,24 +17,78 @@ const navItems = [
 
 export default function AppLayout() {
   const { syncing, lastSync, triggerSync } = useSync();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const location = useLocation();
 
   useEffect(() => {
     triggerSync();
   }, []);
 
+  // Route change → close mobile sidebar
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
+
+  // Body scroll lock when mobile sidebar open
+  useEffect(() => {
+    if (sidebarOpen) {
+      document.body.style.overflow = "hidden";
+      return () => { document.body.style.overflow = ""; };
+    }
+  }, [sidebarOpen]);
+
   return (
     <div className="min-h-screen flex">
-      <aside className="w-60 bg-slate-900/95 border-r border-slate-800 flex flex-col fixed h-full">
-        <div className="p-5 border-b border-slate-800">
-          <h1 className="text-xl font-bold flex items-center gap-2">
-            <span className="text-2xl">⚽</span>
-            <span className="bg-gradient-to-r from-pitch-600 to-gold-500 bg-clip-text text-transparent">
-              WC 2026
-            </span>
-          </h1>
-          <p className="text-xs text-slate-500 mt-1">预测系统 · USA·MX·CA</p>
+      {/* Mobile top bar */}
+      <header className="lg:hidden fixed top-0 left-0 right-0 z-30 h-14 bg-slate-900/95 backdrop-blur border-b border-slate-800 flex items-center justify-between px-4">
+        <h1 className="text-lg font-bold flex items-center gap-2">
+          <span className="text-xl">⚽</span>
+          <span className="bg-gradient-to-r from-pitch-600 to-gold-500 bg-clip-text text-transparent">WC 2026</span>
+        </h1>
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="p-2 rounded-lg hover:bg-slate-800 text-slate-300"
+          aria-label="打开菜单"
+        >
+          <Menu size={22} />
+        </button>
+      </header>
+
+      {/* Overlay (mobile only) */}
+      {sidebarOpen && (
+        <div
+          className="lg:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside
+        className={clsx(
+          "w-60 bg-slate-900/95 border-r border-slate-800 flex flex-col fixed h-full z-50 transition-transform duration-300",
+          "lg:translate-x-0",
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        <div className="p-5 border-b border-slate-800 flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold flex items-center gap-2">
+              <span className="text-2xl">⚽</span>
+              <span className="bg-gradient-to-r from-pitch-600 to-gold-500 bg-clip-text text-transparent">
+                WC 2026
+              </span>
+            </h1>
+            <p className="text-xs text-slate-500 mt-1">预测系统 · USA·MX·CA</p>
+          </div>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="lg:hidden p-1.5 rounded-lg hover:bg-slate-800 text-slate-400"
+            aria-label="关闭菜单"
+          >
+            <X size={18} />
+          </button>
         </div>
-        <nav className="flex-1 p-3 space-y-1">
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {navItems.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
@@ -71,7 +125,9 @@ export default function AppLayout() {
           <p className="text-[10px] text-slate-600 text-center">数据源: ESPN · 每小时:15自动</p>
         </div>
       </aside>
-      <main className="flex-1 ml-60 p-6 overflow-auto">
+
+      {/* Main content */}
+      <main className="flex-1 lg:ml-60 pt-14 lg:pt-0 p-4 lg:p-6 overflow-auto">
         <Outlet />
       </main>
     </div>
