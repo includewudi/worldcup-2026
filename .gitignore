@@ -1,0 +1,10 @@
+node_modules/
+dist/
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.log
+.DS_Store
+backend/app/data/fixtures.json
+!backend/app/data/.gitkeep
