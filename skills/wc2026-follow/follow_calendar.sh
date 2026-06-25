@@ -95,6 +95,22 @@ ESPN_OVERRIDE = {"BOS": "BIH", "SUI": "SUI"}
 def norm_abbr(a):
     return ESPN_OVERRIDE.get(a, a)
 
+def _translate_placeholder(text):
+    if not text or len(text) <= 3:
+        return text
+    t = text
+    t = re.sub(r'Group ([A-L]) Winner', lambda m: m.group(1) + "\u7ec4\u7b2c1", t)
+    t = re.sub(r'Group ([A-L]) 2nd Place', lambda m: m.group(1) + "\u7ec4\u7b2c2", t)
+    t = re.sub(r'Group ([A-L]) 3rd Place', lambda m: m.group(1) + "\u7ec4\u7b2c3", t)
+    t = re.sub(r'Round of 32 (\d+) Winner vs Round of 32 (\d+) Winner',
+               lambda m: f"R32\u80dc\u8005{m.group(1)} vs R32\u80dc\u8005{m.group(2)}", t)
+    t = re.sub(r'Round of 16 (\d+) Winner vs Round of 16 (\d+) Winner',
+               lambda m: f"R16\u80dc\u8005{m.group(1)} vs R16\u80dc\u8005{m.group(2)}", t)
+    if "Third Place Group" in t:
+        groups = re.findall(r'Group ([A-L])', t)
+        t = "\u5c0f\u7ec4\u7b2c3\uff08" + "/".join(groups) + "\uff09"
+    return t
+
 events_raw = espn.get("events", [])
 fixtures = []
 
@@ -127,12 +143,17 @@ for ev in events_raw:
     venue = venue_obj.get("fullName", "")
     city = venue_obj.get("address", {}).get("city", "")
 
-    # Parse group from altGameNote: "FIFA World Cup, Group A"
-    group = "?"
+    # Parse group or round from altGameNote: "FIFA World Cup, Group A" or "FIFA World Cup"
+    group = None
+    round_label = None
     alt_note = comp.get("altGameNote", "")
     m = re.search(r'Group ([A-L])', alt_note)
     if m:
         group = m.group(1)
+    else:
+        clean = alt_note.replace("FIFA World Cup, ", "").replace("FIFA World Cup", "").strip()
+        round_label = clean or "淘汰赛"
+
 
     fixtures.append({
         "home": home, "away": away,
@@ -144,6 +165,7 @@ for ev in events_raw:
         "home_score": int(home_c.get("score", 0)) if completed else None,
         "away_score": int(away_c.get("score", 0)) if completed else None,
         "group": group,
+        "round_label": round_label,
         "venue": venue, "city": city,
     })
 
@@ -166,14 +188,20 @@ for fx in matched:
     bj_dt = fx["utc_dt"].astimezone(bj_tz)
     end_dt = bj_dt + timedelta(minutes=105)
 
-    home_cn = team_cn.get(fx["home"], fx["home_display_raw"])
-    away_cn = team_cn.get(fx["away"], fx["away_display_raw"])
+    home_cn = team_cn.get(fx["home"], _translate_placeholder(fx["home_display_raw"]))
+    away_cn = team_cn.get(fx["away"], _translate_placeholder(fx["away_display_raw"]))
+
+    if fx["group"]:
+        stage = f"\u4e16\u754c\u676f{fx['group']}\u7ec4"
+    else:
+        rl = fx.get("round_label") or "\u6dd8\u6c70\u8d5b"
+        stage = f"\u4e16\u754c\u676f{rl}"
 
     if fx["played"]:
         score = f'{fx["home_score"]}-{fx["away_score"]}'
-        title = f"\u26bd {home_cn} {score} {away_cn} (\u4e16\u754c\u676f{fx['group']}\u7ec4)"
+        title = f"\u26bd {home_cn} {score} {away_cn} ({stage})"
     else:
-        title = f"\u26bd {home_cn} vs {away_cn} (\u4e16\u754c\u676f{fx['group']}\u7ec4)"
+        title = f"\u26bd {home_cn} vs {away_cn} ({stage})"
 
     venue_full = f"{fx['venue']}, {fx['city']}" if fx['city'] else fx['venue']
 
@@ -187,7 +215,8 @@ for fx in matched:
         "note": venue_full,
     })
     score_display = f'{fx["home_score"]}-{fx["away_score"]}' if fx["played"] else "vs"
-    print(f'  {bj_dt.strftime("%m/%d %a %H:%M")} | {home_cn} {score_display} {away_cn} | {fx["group"]}组 | {venue_full}')
+    stage_short = f'{fx["group"]}\u7ec4' if fx["group"] else (fx.get('round_label') or '\u6dd8\u6c70\u8d5b')
+    print(f'  {bj_dt.strftime("%m/%d %a %H:%M")} | {home_cn} {score_display} {away_cn} | {stage_short} | {venue_full}')
 
 print()
 

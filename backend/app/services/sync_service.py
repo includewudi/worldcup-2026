@@ -13,7 +13,7 @@ import json
 import os
 import threading
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -39,10 +39,25 @@ def _http_get_json(url: str, headers: dict | None = None, timeout: int = 15) -> 
         return json.loads(resp.read().decode("utf-8"))
 
 
-def _fetch_espn_day(date_str: str) -> list[dict]:
-    url = f"{ESPN_BASE}?dates={date_str}"
-    data = _http_get_json(url)
-    results = []
+def fetch_espn_range(start: str, end: str) -> tuple[list[dict], list[dict]]:
+    """Fetch matches from ESPN across a date range (YYYY-MM-DD).
+
+    Returns (group_results, knockout_results).
+    ESPN supports a single call with dates=YYYYMMDD-YYYYMMDD.
+    """
+    start_compact = start.replace("-", "")
+    end_compact = end.replace("-", "")
+    url = f"{ESPN_BASE}?dates={start_compact}-{end_compact}"
+    try:
+        data = _http_get_json(url)
+    except Exception as e:
+        _last_sync["results"]["espn_error"] = str(e)
+        return [], []
+
+    group_results: list[dict] = []
+    knockout_results: list[dict] = []
+    seen_ko: set = set()
+
     for event in data.get("events", []):
         comps = event.get("competitions", [])
         if not comps:
@@ -64,36 +79,39 @@ def _fetch_espn_day(date_str: str) -> list[dict]:
         )
         status = comp.get("status", {}).get("type", {})
         completed = status.get("completed", False)
+        alt_note = comp.get("altGameNote", "")
+        venue_obj = comp.get("venue", {})
+        venue = venue_obj.get("fullName", "")
+        city = venue_obj.get("address", {}).get("city", "")
+        home_display = home.get("team", {}).get("displayName", home_abbr)
+        away_display = away.get("team", {}).get("displayName", away_abbr)
 
-        results.append({
+        result = {
             "date": event.get("date", "")[:10],
             "utc_time": event.get("date", "")[11:16] if len(event.get("date", "")) > 15 else None,
             "home_abbr": home_abbr,
             "away_abbr": away_abbr,
+            "home_display": home_display,
+            "away_display": away_display,
             "home_score": int(home.get("score", 0)) if completed else None,
             "away_score": int(away.get("score", 0)) if completed else None,
             "played": completed,
+            "venue": venue,
+            "city": city,
             "source": "ESPN",
-        })
-    return results
+        }
 
+        if "Group" in alt_note:
+            group_results.append(result)
+        else:
+            key = (home_abbr, away_abbr, result["date"])
+            if key not in seen_ko:
+                seen_ko.add(key)
+                result["round"] = alt_note.replace("FIFA World Cup, ", "").replace("FIFA World Cup", "").strip() or "Knockout"
+                knockout_results.append(result)
 
-def fetch_espn_range(start: str, end: str) -> list[dict]:
-    """Fetch matches from ESPN across a date range (YYYY-MM-DD)."""
-    start_dt = datetime.strptime(start, "%Y-%m-%d")
-    end_dt = datetime.strptime(end, "%Y-%m-%d")
-    all_results: list[dict] = []
-    current = start_dt
-    while current <= end_dt:
-        date_str = current.strftime("%Y%m%d")
-        try:
-            day_results = _fetch_espn_day(date_str)
-            all_results.extend(day_results)
-        except Exception as e:
-            _last_sync["results"]["espn_error"] = str(e)
-        current += timedelta(days=1)
-    _last_sync["results"]["espn_count"] = len(all_results)
-    return all_results
+    _last_sync["results"]["espn_count"] = len(group_results) + len(knockout_results)
+    return group_results, knockout_results
 
 
 def fetch_football_data(season: int = 2026) -> list[dict]:
@@ -164,23 +182,17 @@ def apply_results(fixtures: list[dict], results: list[dict]) -> int:
 
 
 def sync_results(start_date: str | None = None, end_date: str | None = None) -> dict:
-    """Sync match results from all sources and write to fixtures.json.
-
-    Args:
-        start_date: YYYY-MM-DD, defaults to tournament start
-        end_date: YYYY-MM-DD, defaults to today
-    """
     with _sync_lock:
         start = start_date or "2026-06-11"
-        end = end_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        end = end_date or "2026-07-19"
 
         raw = json.loads(FIXTURES_PATH.read_text("utf-8"))
         fixtures = raw["group_stage_fixtures"]
 
         before_played = sum(1 for f in fixtures if f.get("played"))
 
-        espn_results = fetch_espn_range(start, end)
-        updated_espn = apply_results(fixtures, espn_results)
+        espn_group, espn_knockout = fetch_espn_range(start, end)
+        updated_espn = apply_results(fixtures, espn_group)
 
         fd_results = fetch_football_data()
         updated_fd = apply_results(fixtures, fd_results)
@@ -189,9 +201,11 @@ def sync_results(start_date: str | None = None, end_date: str | None = None) -> 
         new_results = after_played - before_played
 
         raw["group_stage_fixtures"] = fixtures
+        raw["knockout_fixtures"] = espn_knockout
         raw["last_sync"] = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "espn_results": len(espn_results),
+            "espn_results": len(espn_group),
+            "espn_knockout": len(espn_knockout),
             "football_data_results": len(fd_results),
             "new_results_found": new_results,
         }
@@ -202,7 +216,8 @@ def sync_results(start_date: str | None = None, end_date: str | None = None) -> 
 
         _last_sync["espn"] = datetime.now(timezone.utc).isoformat()
         _last_sync["results"] = {
-            "espn_fetched": len(espn_results),
+            "espn_fetched": len(espn_group),
+            "espn_knockout": len(espn_knockout),
             "football_data_fetched": len(fd_results),
             "new_results": new_results,
             "total_played": after_played,
@@ -210,7 +225,8 @@ def sync_results(start_date: str | None = None, end_date: str | None = None) -> 
         _last_sync["updated"] = _last_sync.get("updated", 0) + 1
 
         return {
-            "espn_fetched": len(espn_results),
+            "espn_fetched": len(espn_group),
+            "espn_knockout": len(espn_knockout),
             "football_data_fetched": len(fd_results),
             "new_results": new_results,
             "total_played": after_played,

@@ -10,6 +10,7 @@ import PredictPage from "@/pages/PredictPage";
 import SimulationPage from "@/pages/SimulationPage";
 import FollowPage from "@/pages/FollowPage";
 import StandingsPage from "@/pages/StandingsPage";
+import KnockoutPage from "@/pages/KnockoutPage";
 import "@/index.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
@@ -21,6 +22,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="/" element={<Dashboard />} />
             <Route path="/follow" element={<FollowPage />} />
             <Route path="/standings" element={<StandingsPage />} />
+            <Route path="/knockout" element={<KnockoutPage />} />
             <Route path="/teams" element={<TeamsPage />} />
             <Route path="/fixtures" element={<FixturesPage />} />
             <Route path="/predict" element={<PredictPage />} />

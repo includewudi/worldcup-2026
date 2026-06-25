@@ -99,6 +99,7 @@ export interface MonteCarloResponse {
 
 export interface SyncResult {
   espn_fetched: number;
+  espn_knockout?: number;
   football_data_fetched: number;
   new_results: number;
   total_played: number;
@@ -110,4 +111,20 @@ export interface SyncStatus {
   football_data: string | null;
   results: Record<string, number | string>;
   updated: number;
+}
+
+export interface KnockoutFixture {
+  home_abbr: string;
+  away_abbr: string;
+  home_display: string;
+  away_display: string;
+  date: string;
+  utc_time: string | null;
+  home_score: number | null;
+  away_score: number | null;
+  played: boolean;
+  venue: string;
+  city: string;
+  round: string;
+  source: string;
 }

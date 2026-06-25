@@ -81,6 +81,7 @@ def root():
             "teams_by_group/{group}": "/api/teams/{group}",
             "fixtures": "/api/fixtures",
             "fixtures_by_group/{group}": "/api/fixtures/{group}",
+            "knockout": "/api/knockout",
             "standings": "/api/standings",
             "standings/{group}": "/api/standings/{group}",
             "tournament_info": "/api/tournament",
@@ -126,6 +127,12 @@ def get_fixtures_by_group(group: str):
         raise HTTPException(400, "Group must be a single letter A-L")
     fixtures = [f for f in predictor.fixtures_list() if f["group"] == group.upper()]
     return {"group": group.upper(), "count": len(fixtures), "fixtures": fixtures}
+
+
+@app.get("/api/knockout")
+def get_knockout_fixtures():
+    fixtures = predictor.knockout_fixtures()
+    return {"count": len(fixtures), "fixtures": fixtures}
 
 
 @app.get("/api/tournament")

@@ -58,9 +58,13 @@ def fixtures_list() -> list[dict]:
     return get_fixtures_raw()["group_stage_fixtures"]
 
 
+def knockout_fixtures() -> list[dict]:
+    return get_fixtures_raw().get("knockout_fixtures", [])
+
+
 def tournament_info() -> dict:
     raw = get_fixtures_raw()
-    return {k: v for k, v in raw.items() if k != "group_stage_fixtures"}
+    return {k: v for k, v in raw.items() if k not in ("group_stage_fixtures", "knockout_fixtures")}
 
 
 def compute_group_standings(group: str | None = None) -> dict[str, list[dict]]:

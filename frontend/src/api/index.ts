@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { Team, Fixture, TournamentInfo, MatchPrediction, MonteCarloResponse, StandingsResponse, SyncResult, SyncStatus } from "@/types";
+import type { Team, Fixture, TournamentInfo, MatchPrediction, MonteCarloResponse, StandingsResponse, SyncResult, SyncStatus, KnockoutFixture } from "@/types";
 
 const api = axios.create({ baseURL: "/api", timeout: 120000 });
 
@@ -41,4 +41,9 @@ export async function refreshResults(): Promise<SyncResult> {
 export async function fetchSyncStatus(): Promise<SyncStatus> {
   const { data } = await api.get("/sync/status");
   return data;
+}
+
+export async function fetchKnockout(): Promise<KnockoutFixture[]> {
+  const { data } = await api.get("/knockout");
+  return data.fixtures;
 }
