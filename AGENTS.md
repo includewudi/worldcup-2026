@@ -71,6 +71,26 @@ follow_calendar.sh BRA --calendar 工作    # 指定日历名称
 | `data/team_names_cn.json` | ~1KB | 英文名 → 中文名映射（48 队） |
 | `SKILL.md` | ~50 行 | Skill 触发词和描述（可选） |
 
+### 模式 A2：部署竞猜分析 Skill（需项目存在）
+
+**前置条件：** worldcup-2026 项目已 clone 到本地 + Python 3.10+
+
+```bash
+# 安装 skill
+cp -r skills/wc2026-analyze ~/.config/opencode/skills/
+# 或 Claude Code:
+cp -r skills/wc2026-analyze ~/.claude/skills/
+
+# 直接使用
+bash skills/wc2026-analyze/analyze.sh EGY IRN all           # 全分析
+bash skills/wc2026-analyze/analyze.sh 巴西 阿根廷 btts      # 只看两队都进球
+bash skills/wc2026-analyze/analyze.sh CPV KSA ht-draw over  # 半场打平 + 大小球
+```
+
+分析类型：`summary` `result` `btts` `ht-result` `ht-draw` `over` `cs` `ht-cs` `handicap` `all`
+
+非默认路径设置：`export WC2026_BACKEND=/path/to/worldcup-2026/backend`
+
 ### 模式 B：部署后端 API
 
 **前置条件：** Python 3.10+
