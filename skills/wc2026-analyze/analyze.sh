@@ -7,12 +7,29 @@ if [[ -n "${WC2026_BACKEND:-}" ]] && [[ -f "$WC2026_BACKEND/analyze.py" ]]; then
   BACKEND="$WC2026_BACKEND"
 fi
 
-for p in "$HOME/data/code/python/worldcup-2026/backend" "$HOME/worldcup-2026/backend"; do
-  if [[ -f "$p/analyze.py" ]]; then
-    BACKEND="$p"
-    break
-  fi
-done
+if [[ -z "$BACKEND" ]]; then
+  SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+  CANDIDATES=(
+    "$SCRIPT_DIR/../../backend"
+    "$SCRIPT_DIR/../backend"
+    "$HOME/worldcup-2026/backend"
+    "$HOME/projects/worldcup-2026/backend"
+    "$HOME/code/worldcup-2026/backend"
+  )
+  for p in "${CANDIDATES[@]}"; do
+    if [[ -f "$p/analyze.py" ]]; then
+      BACKEND="$p"
+      break
+    fi
+  done
+fi
+
+if [[ -z "$BACKEND" ]]; then
+  echo "❌ 找不到 worldcup-2026 项目"
+  echo "   设置环境变量指向 backend 目录："
+  echo "   export WC2026_BACKEND=/path/to/worldcup-2026/backend"
+  exit 1
+fi
 
 if [[ -f "$BACKEND/../.venv/bin/python" ]]; then
   PY="$BACKEND/../.venv/bin/python"
