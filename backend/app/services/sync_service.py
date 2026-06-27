@@ -186,6 +186,8 @@ def sync_results(start_date: str | None = None, end_date: str | None = None) -> 
         start = start_date or "2026-06-11"
         end = end_date or "2026-07-19"
 
+        if not FIXTURES_PATH.exists():
+            raise RuntimeError("fixtures.json not found — the data file is required")
         raw = json.loads(FIXTURES_PATH.read_text("utf-8"))
         fixtures = raw["group_stage_fixtures"]
 
