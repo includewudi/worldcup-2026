@@ -2,16 +2,18 @@
 import logging
 import os
 import sys
+import time
+from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -72,6 +74,51 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ── Rate limiting (in-memory sliding window) ──────────────
+_RATE_GLOBAL = int(os.environ.get("RATE_GLOBAL", "60"))   # req/min per IP (all endpoints)
+_RATE_SIMULATE = int(os.environ.get("RATE_SIMULATE", "5"))  # req/min per IP (/api/simulate only)
+_RATE_WINDOW = 60  # seconds
+
+_req_log: dict[str, deque] = defaultdict(deque)
+_sim_log: dict[str, deque] = defaultdict(deque)
+
+
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _hit(log: dict[str, deque], key: str, limit: int) -> bool:
+    now = time.time()
+    bucket = log[key]
+    while bucket and bucket[0] < now - _RATE_WINDOW:
+        bucket.popleft()
+    if len(bucket) >= limit:
+        return False
+    bucket.append(now)
+    return True
+
+
+@app.middleware("http")
+async def rate_limit(request: Request, call_next):
+    ip = _client_ip(request)
+    if not _hit(_req_log, ip, _RATE_GLOBAL):
+        return JSONResponse(
+            status_code=429,
+            content={"detail": f"Too many requests. Limit: {_RATE_GLOBAL}/min."},
+            headers={"Retry-After": str(_RATE_WINDOW)},
+        )
+    if request.url.path == "/api/simulate" and not _hit(_sim_log, ip, _RATE_SIMULATE):
+        return JSONResponse(
+            status_code=429,
+            content={"detail": f"Simulation limit reached. Max {_RATE_SIMULATE}/min."},
+            headers={"Retry-After": str(_RATE_WINDOW)},
+        )
+    return await call_next(request)
 
 _static_dir = Path(__file__).resolve().parent.parent / "static"
 _serve_frontend = _static_dir.is_dir() and os.environ.get("SERVE_FRONTEND", "1") == "1"
