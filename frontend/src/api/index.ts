@@ -2,20 +2,76 @@ import axios from "axios";
 import type { Team, Fixture, TournamentInfo, MatchPrediction, MonteCarloResponse, StandingsResponse, SyncResult, SyncStatus, KnockoutFixture } from "@/types";
 
 const baseURL = import.meta.env.VITE_API_BASE || "/api";
-const api = axios.create({ baseURL, timeout: 120000 });
+const api = axios.create({ baseURL, timeout: 15000 });
+
+const CACHE_PREFIX = "wc2026-cache:";
+
+interface CacheEntry<T> {
+  data: T;
+  ts: number;
+}
+
+function readCache<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(CACHE_PREFIX + key);
+    if (!raw) return null;
+    const entry: CacheEntry<T> = JSON.parse(raw);
+    return entry.data;
+  } catch {
+    return null;
+  }
+}
+
+function writeCache<T>(key: string, data: T): void {
+  try {
+    const entry: CacheEntry<T> = { data, ts: Date.now() };
+    localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(entry));
+  } catch {}
+}
+
+export function getCacheAge(key: string): number | null {
+  try {
+    const raw = localStorage.getItem(CACHE_PREFIX + key);
+    if (!raw) return null;
+    const entry: CacheEntry<unknown> = JSON.parse(raw);
+    return Date.now() - entry.ts;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchWithCache<T>(key: string, fn: () => Promise<T>): Promise<{ data: T; stale: boolean }> {
+  try {
+    const data = await fn();
+    writeCache(key, data);
+    return { data, stale: false };
+  } catch (err) {
+    const cached = readCache<T>(key);
+    if (cached !== null) {
+      return { data: cached, stale: true };
+    }
+    throw err;
+  }
+}
 
 export async function fetchTeams(group?: string): Promise<Team[]> {
-  const { data } = await api.get("/teams", { params: group ? { group } : {} });
-  return data.teams;
+  const { data } = await fetchWithCache("teams", () =>
+    api.get("/teams", { params: group ? { group } : {} }).then(r => r.data.teams)
+  );
+  return data;
 }
 
 export async function fetchFixtures(group?: string): Promise<Fixture[]> {
-  const { data } = await api.get("/fixtures", { params: group ? { group } : {} });
-  return data.fixtures;
+  const { data } = await fetchWithCache("fixtures", () =>
+    api.get("/fixtures", { params: group ? { group } : {} }).then(r => r.data.fixtures)
+  );
+  return data;
 }
 
 export async function fetchTournamentInfo(): Promise<TournamentInfo> {
-  const { data } = await api.get("/tournament");
+  const { data } = await fetchWithCache("tournament", () =>
+    api.get("/tournament").then(r => r.data)
+  );
   return data;
 }
 
@@ -25,12 +81,16 @@ export async function fetchPrediction(homeCode: string, awayCode: string): Promi
 }
 
 export async function runSimulation(sims: number = 10000, seed: number = 2026): Promise<MonteCarloResponse> {
-  const { data } = await api.get("/simulate", { params: { sims, seed } });
+  const { data } = await fetchWithCache(`sim-${sims}`, () =>
+    api.get("/simulate", { params: { sims, seed } }).then(r => r.data)
+  );
   return data;
 }
 
 export async function fetchStandings(group?: string): Promise<StandingsResponse> {
-  const { data } = await api.get("/standings", { params: group ? { group } : {} });
+  const { data } = await fetchWithCache("standings", () =>
+    api.get("/standings", { params: group ? { group } : {} }).then(r => r.data)
+  );
   return data;
 }
 
@@ -45,6 +105,8 @@ export async function fetchSyncStatus(): Promise<SyncStatus> {
 }
 
 export async function fetchKnockout(): Promise<KnockoutFixture[]> {
-  const { data } = await api.get("/knockout");
-  return data.fixtures;
+  const { data } = await fetchWithCache("knockout", () =>
+    api.get("/knockout").then(r => r.data.fixtures)
+  );
+  return data;
 }
