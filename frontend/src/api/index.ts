@@ -1,7 +1,8 @@
 import axios from "axios";
 import type { Team, Fixture, TournamentInfo, MatchPrediction, MonteCarloResponse, StandingsResponse, SyncResult, SyncStatus, KnockoutFixture } from "@/types";
 
-const api = axios.create({ baseURL: "/api", timeout: 120000 });
+const baseURL = import.meta.env.VITE_API_BASE || "/api";
+const api = axios.create({ baseURL, timeout: 120000 });
 
 export async function fetchTeams(group?: string): Promise<Team[]> {
   const { data } = await api.get("/teams", { params: group ? { group } : {} });

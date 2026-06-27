@@ -1,5 +1,6 @@
 """FastAPI application entry point — World Cup 2026 Prediction API."""
 import logging
+import os
 import sys
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -61,9 +62,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+_cors_origins = os.environ.get("CORS_ORIGINS", "http://localhost:5570,http://127.0.0.1:5570")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5570", "http://127.0.0.1:5570"],
+    allow_origins=[o.strip() for o in _cors_origins.split(",") if o.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: wc2026-api
+    runtime: python
+    region: singapore  # 或 oregon / frankfurt，离你近的
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: bash start.sh
+    healthCheckPath: /api/sync/status
+    autoDeploy: true
+    envVars:
+      - key: CORS_ORIGINS
+        # 部署前端后，把 Vercel 域名填这里（逗号分隔多个）
+        # 例如: https://wc2026.vercel.app,https://wc2026-git-main.vercel.app
+        sync: false
