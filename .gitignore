@@ -10,3 +10,4 @@ backend/app/data/fixtures.json
 !backend/app/data/.gitkeep
 .env
 .env.local
+backend/static/

@@ -1,104 +1,118 @@
-# 免费部署到外网（Vercel + Render）
+# 免费部署到外网
 
-> 30 分钟把 World Cup 2026 系统部署到公网，永久免费。
+> 三种方案，全部免费，选一个就行。
 
-## 架构
+## 方案对比
 
-```
-用户浏览器
-  │
-  ├── Vercel (前端 React)
-  │     └── 调用 API →
-  │
-  └── Render (后端 FastAPI)
-        └── ESPN API（拉取比分）
-```
+| 方案 | 平台 | 优点 | 缺点 |
+|------|------|------|------|
+| **A. HF Spaces** ⭐推荐 | Hugging Face | 一个 Space 搞定、不休眠、不绑卡、16GB RAM | URL 是 `xxx.hf.space` |
+| **B. Vercel + Render** | 分两个平台 | Vercel CDN 超快、自定义域名 | Render 休眠、需绑卡 |
+| **C. 本地 + Cloudflare Tunnel** | 自己 Mac | 零改动 | Mac 要一直开 |
 
-## 前置
+---
 
-- GitHub 账号
-- 仓库已 fork 或 push 到你自己的 GitHub
+## 方案 A: Hugging Face Spaces（推荐）
 
-## Step 1: 部署后端到 Render
+一个 Docker 容器同时跑前后端，完全免费，不休眠。
 
-1. 打开 https://render.com，用 GitHub 登录
-2. **New +** → **Web Service** → 选择你的 `worldcup-2026` 仓库
-3. 填写：
-   - **Name**: `wc2026-api`（或随意）
-   - **Region**: 新加坡 / Oregon（离你近的）
-   - **Runtime**: Python 3
-   - **Root Directory**: `backend`
-   - **Build Command**: `pip install -r requirements.txt`
-   - **Start Command**: `bash start.sh`
-   - **Plan**: Free
-4. **Environment** 标签 → 添加变量：
-   - `CORS_ORIGINS` = （暂时留空，部署前端后填）
-5. 点 **Create Web Service**
+### 步骤
 
-等 2-3 分钟构建完成，Render 会给你一个 URL：
+1. 注册 https://huggingface.co/join（GitHub 登录）
 
-```
-https://wc2026-api.onrender.com
-```
+2. 右上角头像 → **New Space**
+   - **Name**: `wc2026`（随意）
+   - **SDK**: **Docker**
+   - **Visibility**: Public
+   - 点 **Create Space**
 
-验证：
+3. 把 GitHub 仓库同步到 HF Space（二选一）：
+
+   **方式 1（推荐）：在 Space 页面直接 Files → 上传**
+   ```bash
+   # 克隆你的 GitHub 仓库后，把所有文件上传到 Space
+   ```
+
+   **方式 2：Git 推送**
+   ```bash
+   # 在你的 GitHub 仓库目录
+   git remote add hf https://huggingface.co/spaces/你的用户名/wc2026
+   git push hf main
+   ```
+
+4. Space 会自动构建 Dockerfile（2-5 分钟），构建完成后拿到 URL：
+   ```
+   https://你的用户名-wc2026.hf.space
+   ```
+
+5. 打开 URL，前端 + API 全部可用。
+
+### 工作原理
+
+- Dockerfile 两阶段构建：Node build 前端 → Python 跑 FastAPI
+- 前端 build 产物放到 `backend/static/`
+- FastAPI 检测到 `static/` 目录后自动挂载（`SERVE_FRONTEND=1`）
+- 端口 7860（HF Spaces 要求）
+- 访问 `/` 返回前端，`/api/*` 返回 API，`/predict` 等前端路由自动 fallback 到 index.html
+
+### 更新
+
+改代码后 `git push hf main`，Space 自动重新构建。
+
+---
+
+## 方案 B: Vercel + Render
+
+前后端分开部署。
+
+### Step 1: 后端 → Render
+
+1. https://render.com → GitHub 登录
+2. **New +** → **Blueprint** → 选仓库（自动读 `render.yaml`）
+3. 拿到 URL：`https://wc2026-api-xxxx.onrender.com`
+
+### Step 2: 前端 → Vercel
+
+1. https://vercel.com → GitHub 登录
+2. **Add New Project** → 选仓库
+3. `vercel.json` 已配好，添加环境变量：
+   - `VITE_API_BASE` = `https://wc2026-api-xxxx.onrender.com/api`
+4. Deploy → 拿到 `https://worldcup-2026-xxx.vercel.app`
+
+### Step 3: 互连 CORS
+
+回 Render → Environment → `CORS_ORIGINS` = 你的 Vercel URL
+
+---
+
+## 方案 C: 本地 + Cloudflare Tunnel
+
+适合自己用或给少数人分享。
 
 ```bash
-curl https://wc2026-api.onrender.com/api/sync/status
+# 启动后端 + 前端
+cd backend && PYTHONPATH=. .venv/bin/python -m uvicorn app.main:app --port 8570 &
+cd frontend && npx vite --port 5570 &
+
+# 装 cloudflared
+brew install cloudflared
+
+# 一条命令获得公网 URL
+cloudflared tunnel --url http://localhost:5570
 ```
 
-返回 JSON 即成功。
+拿到 `https://xxx.trycloudflare.com` 发给朋友。
 
-⚠️ Render 免费层：15 分钟无访问会休眠，下次访问冷启动 ~30s。世界杯期间流量大基本不会睡。
-
-## Step 2: 部署前端到 Vercel
-
-1. 打开 https://vercel.com，用 GitHub 登录
-2. **Add New** → **Project** → 选择 `worldcup-2026` 仓库
-3. 配置已写在 `vercel.json`，确认即可：
-   - **Framework**: Vite
-   - **Build Command**: `cd frontend && npm install && npm run build`
-   - **Output Directory**: `frontend/dist`
-4. **Environment Variables** → 添加：
-   - `VITE_API_BASE` = `https://wc2026-api.onrender.com/api`
-   （替换成你 Step 1 拿到的 Render URL + `/api`）
-5. 点 **Deploy**
-
-等 1-2 分钟，Vercel 给你：
-
-```
-https://worldcup-2026-xxx.vercel.app
+后端 CORS 需要加这个域名：
+```bash
+CORS_ORIGINS=https://xxx.trycloudflare.com PYTHONPATH=. .venv/bin/python -m uvicorn app.main:app --port 8570
 ```
 
-打开，确认页面正常显示，赛程、积分榜、预测功能都能用。
-
-## Step 3: 互连 CORS
-
-回到 Render Dashboard → 你的 Web Service → Environment：
-
-- `CORS_ORIGINS` = `https://worldcup-2026-xxx.vercel.app`
-
-（多个域名用逗号分隔，比如 preview URL 也要加）
-
-保存后 Render 自动重启，前端即可正常调用 API。
-
-## 常见问题
-
-### Q: Vercel 部署后页面空白？
-A: 检查浏览器 Console。如果是 CORS 错误，确认 Step 3 的 `CORS_ORIGINS` 已配置。如果是 404，检查 Vercel 的 build log 是否成功生成 `dist/`。
-
-### Q: Render 冷启动太慢？
-A: 免费层无解。可以在 https://uptimerobot.com 配 5 分钟 ping `/api/sync/status`，让服务保持热。世界杯期间流量大一般不会睡。
-
-### Q: 怎么更新比分？
-A: 后端每小时 :15 自动从 ESPN 同步。无需手动操作。
-
-### Q: 部署后能改代码吗？
-A: 改了 push 到 `main`，Render 和 Vercel 都会自动重新部署。
+---
 
 ## 本地开发
 
-本地不用任何配置：
+不需要任何配置：
 
 ```bash
 # 后端
@@ -111,3 +125,13 @@ cd frontend && npm install && npx vite --port 5570
 ```
 
 前端本地走 Vite proxy，自动转发 `/api` 到 `localhost:8570`。
+
+## 环境变量参考
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `PORT` | 8570 | 后端端口（HF Spaces 自动设 7860） |
+| `CORS_ORIGINS` | `localhost:5570` | 允许的前端域名（逗号分隔） |
+| `SERVE_FRONTEND` | 1 | 为 1 时后端自动服务 `static/` 目录 |
+| `VITE_API_BASE` | 空 | 前端 API 地址（空=走 proxy） |
+| `VITE_OUT_DIR` | dist | 前端 build 输出目录（HF 用 `../backend/static`） |

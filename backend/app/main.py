@@ -10,6 +10,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -71,9 +73,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+_static_dir = Path(__file__).resolve().parent.parent / "static"
+_serve_frontend = _static_dir.is_dir() and os.environ.get("SERVE_FRONTEND", "1") == "1"
+
 
 @app.get("/")
 def root():
+    if _serve_frontend:
+        return FileResponse(_static_dir / "index.html")
     return {
         "service": "World Cup 2026 Prediction API",
         "version": "1.0.0",
@@ -181,3 +188,11 @@ def refresh_results():
 @app.get("/api/sync/status")
 def sync_status():
     return sync_service.get_sync_status()
+
+
+if _serve_frontend:
+    app.mount("/assets", StaticFiles(directory=_static_dir / "assets"), name="assets")
+
+    @app.get("/{full_path:path}")
+    def spa_fallback(full_path: str):
+        return FileResponse(_static_dir / "index.html")
