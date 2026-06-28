@@ -185,10 +185,19 @@ def get_fixtures_by_group(group: str):
     return {"group": group.upper(), "count": len(fixtures), "fixtures": fixtures}
 
 
+def _enrich_team_names(fixtures: list[dict]) -> list[dict]:
+    for fx in fixtures:
+        home = predictor.get_team_by_code(fx.get("home_abbr", ""))
+        away = predictor.get_team_by_code(fx.get("away_abbr", ""))
+        fx["home_cn"] = home["name_cn"] if home else fx.get("home_display", "")
+        fx["away_cn"] = away["name_cn"] if away else fx.get("away_display", "")
+    return fixtures
+
+
 @app.get("/api/knockout")
 def get_knockout_fixtures():
     fixtures = predictor.knockout_fixtures()
-    return {"count": len(fixtures), "fixtures": fixtures}
+    return {"count": len(fixtures), "fixtures": _enrich_team_names(fixtures)}
 
 
 @app.get("/api/tournament")

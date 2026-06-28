@@ -76,7 +76,7 @@ export default function KnockoutPage() {
               <div className="flex-1 flex items-center justify-center gap-3 min-w-0">
                 <div className="text-right flex-1 min-w-0">
                   <div className="font-semibold text-slate-100 truncate">
-                    {fx.home_display}
+                    {fx.home_cn ?? fx.home_display}
                   </div>
                 </div>
                 {fx.played ? (
@@ -88,7 +88,7 @@ export default function KnockoutPage() {
                 )}
                 <div className="text-left flex-1 min-w-0">
                   <div className="font-semibold text-slate-100 truncate">
-                    {fx.away_display}
+                    {fx.away_cn ?? fx.away_display}
                   </div>
                 </div>
               </div>

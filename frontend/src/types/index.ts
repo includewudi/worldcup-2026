@@ -118,6 +118,8 @@ export interface KnockoutFixture {
   away_abbr: string;
   home_display: string;
   away_display: string;
+  home_cn: string;
+  away_cn: string;
   date: string;
   utc_time: string | null;
   home_score: number | null;
