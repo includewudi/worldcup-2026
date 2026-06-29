@@ -72,6 +72,15 @@ export interface MatchPrediction {
     most_likely_score_prob: number;
     top_scores: { score: number[]; prob: number }[];
     home_advantage_applied: number;
+    squad_adjustment?: {
+      applied: boolean;
+      home_attack?: number;
+      home_defense?: number;
+      away_attack?: number;
+      away_defense?: number;
+      home_adj_pct?: number;
+      away_adj_pct?: number;
+    };
   };
 }
 

@@ -159,6 +159,62 @@ def expected_goals_from_elo(home_elo: float, away_elo: float, home_advantage: fl
     return lambda_home, lambda_away
 
 
+_SQUAD_MIN_COVERAGE = 30.0
+_SQUAD_ADJUSTMENT_WEIGHT = 0.15
+_SQUAD_REF_RATING = 75.0
+_SQUAD_SCALE = 20.0
+
+
+def _get_squad_strengths(code: str) -> Optional[dict]:
+    try:
+        from app.services.squad_service import get_squad_summary
+    except ImportError:
+        return None
+    s = get_squad_summary(code)
+    if not s or s.get("rating_coverage_pct", 0) < _SQUAD_MIN_COVERAGE:
+        return None
+    return {
+        "attack": s.get("attack_rating", 0),
+        "defense": s.get("defense_rating", 0),
+    }
+
+
+def expected_goals_adjusted(
+    home_elo: float,
+    away_elo: float,
+    home_code: str = "",
+    away_code: str = "",
+    home_advantage: float = 55.0,
+) -> tuple[float, float, float, float]:
+    """Elo-based λ with optional squad attack/defense adjustment.
+
+    Returns (lambda_home, lambda_away, adjustment_home, adjustment_away)
+    where adjustment is the fractional change applied (0.0 = no squad data).
+    """
+    lam_h, lam_a = expected_goals_from_elo(home_elo, away_elo, home_advantage)
+
+    if not home_code or not away_code:
+        return lam_h, lam_a, 0.0, 0.0
+
+    home_s = _get_squad_strengths(home_code)
+    away_s = _get_squad_strengths(away_code)
+    if not home_s or not away_s:
+        return lam_h, lam_a, 0.0, 0.0
+
+    home_att_factor = (home_s["attack"] - _SQUAD_REF_RATING) / _SQUAD_SCALE
+    away_def_factor = (away_s["defense"] - _SQUAD_REF_RATING) / _SQUAD_SCALE
+    away_att_factor = (away_s["attack"] - _SQUAD_REF_RATING) / _SQUAD_SCALE
+    home_def_factor = (home_s["defense"] - _SQUAD_REF_RATING) / _SQUAD_SCALE
+
+    adj_h = _SQUAD_ADJUSTMENT_WEIGHT * (home_att_factor - away_def_factor)
+    adj_a = _SQUAD_ADJUSTMENT_WEIGHT * (away_att_factor - home_def_factor)
+
+    lam_h_adj = max(0.2, min(lam_h * (1 + adj_h), 4.5))
+    lam_a_adj = max(0.15, min(lam_a * (1 + adj_a), 3.5))
+
+    return lam_h_adj, lam_a_adj, adj_h, adj_a
+
+
 def dixon_coles_tau(home_goals: int, away_goals: int, lambda_home: float, lambda_away: float, rho: float = -0.08) -> float:
     """Dixon-Coles low-score correction factor.
 
@@ -181,7 +237,8 @@ def poisson_pmf(k: int, lam: float) -> float:
     return (math.exp(-lam) * lam ** k) / math.factorial(k)
 
 
-def match_probabilities(home_elo: float, away_elo: float, max_goals: int = 8) -> dict:
+def match_probabilities(home_elo: float, away_elo: float, max_goals: int = 8,
+                        home_code: str = "", away_code: str = "") -> dict:
     """Compute win/draw/loss probabilities and scoreline matrix.
 
     Returns:
@@ -195,7 +252,9 @@ def match_probabilities(home_elo: float, away_elo: float, max_goals: int = 8) ->
             "most_likely_score": [int, int],
         }
     """
-    lambda_home, lambda_away = expected_goals_from_elo(home_elo, away_elo)
+    lambda_home, lambda_away, adj_h, adj_a = expected_goals_adjusted(
+        home_elo, away_elo, home_code, away_code
+    )
 
     # Build score matrix with Dixon-Coles correction
     matrix = [[0.0] * (max_goals + 1) for _ in range(max_goals + 1)]
@@ -241,6 +300,8 @@ def match_probabilities(home_elo: float, away_elo: float, max_goals: int = 8) ->
         "most_likely_score": [best_h, best_a],
         "most_likely_score_prob": round(best_p, 4),
         "top_scores": [{"score": s["score"], "prob": round(s["prob"], 4)} for s in scorelines[:10]],
+        "_adj_h": adj_h,
+        "_adj_a": adj_a,
     }
 
 
@@ -252,11 +313,30 @@ def predict_match(home_code: str, away_code: str) -> dict:
     if not home or not away:
         raise ValueError(f"Team code not found: {home_code if not home else away_code}")
 
-    # Home advantage: +55 Elo for host nation, +25 for neutral
     home_adv = 80.0 if home.get("is_host") else 25.0
 
-    probs = match_probabilities(home["elo_rating"], away["elo_rating"])
+    probs = match_probabilities(
+        home["elo_rating"], away["elo_rating"],
+        home_code=home["code"], away_code=away["code"],
+    )
     probs["home_advantage_applied"] = home_adv
+
+    home_s = _get_squad_strengths(home_code)
+    away_s = _get_squad_strengths(away_code)
+    if home_s and away_s:
+        probs["squad_adjustment"] = {
+            "applied": True,
+            "home_attack": home_s["attack"],
+            "home_defense": home_s["defense"],
+            "away_attack": away_s["attack"],
+            "away_defense": away_s["defense"],
+            "home_adj_pct": round(probs.get("_adj_h", 0) * 100, 1),
+            "away_adj_pct": round(probs.get("_adj_a", 0) * 100, 1),
+        }
+        probs.pop("_adj_h", None)
+        probs.pop("_adj_a", None)
+    else:
+        probs["squad_adjustment"] = {"applied": False}
 
     return {
         "home_team": {"code": home["code"], "name": home["name"], "name_cn": home["name_cn"], "elo": home["elo_rating"]},

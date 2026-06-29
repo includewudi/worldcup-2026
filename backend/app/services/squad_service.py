@@ -6,6 +6,9 @@ from collections import Counter
 _data_dir = Path(__file__).parent.parent / "data"
 _players_cache: Optional[dict] = None
 
+ATTACK_POS = {"FW", "MF"}
+DEFENSE_POS = {"DF", "GK"}
+
 
 def _load_players() -> dict:
     global _players_cache
@@ -23,6 +26,21 @@ def get_squad(team_code: str) -> Optional[dict]:
     return _load_players().get(team_code.upper())
 
 
+def _calc_strengths(players: list) -> dict:
+    rated = [p for p in players if p.get("rating")]
+    fwd_mf = [p["rating"] for p in rated if p["position"] in ATTACK_POS]
+    df_gk = [p["rating"] for p in rated if p["position"] in DEFENSE_POS]
+    attack = round(sum(fwd_mf) / len(fwd_mf), 1) if fwd_mf else 0
+    defense = round(sum(df_gk) / len(df_gk), 1) if df_gk else 0
+    return {
+        "attack": attack,
+        "defense": defense,
+        "net": round(attack - defense, 1),
+        "attack_rated": len(fwd_mf),
+        "defense_rated": len(df_gk),
+    }
+
+
 def get_squad_summary(team_code: str, limit: int = 11) -> Optional[dict]:
     squad = get_squad(team_code)
     if not squad:
@@ -37,6 +55,7 @@ def get_squad_summary(team_code: str, limit: int = 11) -> Optional[dict]:
     top_by_value = sorted(players, key=lambda x: -x.get("value_eur", 0))[:limit]
 
     pos_counts = Counter(p["position"] for p in players)
+    strengths = _calc_strengths(players)
 
     return {
         "team_code": team_code.upper(),
@@ -47,6 +66,9 @@ def get_squad_summary(team_code: str, limit: int = 11) -> Optional[dict]:
         "avg_value_eur": squad["total_value"] // max(squad["player_count"], 1),
         "avg_rating": avg_rating,
         "rating_coverage_pct": coverage_pct,
+        "attack_rating": strengths["attack"],
+        "defense_rating": strengths["defense"],
+        "net_rating": strengths["net"],
         "top_player": squad["top_player"],
         "position_breakdown": dict(pos_counts),
         "top_players_by_rating": top_by_rating,
@@ -70,6 +92,8 @@ def compare_squads(home_code: str, away_code: str) -> dict:
         "away": away,
         "value_gap_eur": home["total_value_eur"] - away["total_value_eur"],
         "rating_gap": round(home_rating - away_rating, 1),
+        "attack_gap": round(home["attack_rating"] - away["attack_rating"], 1),
+        "defense_gap": round(home["defense_rating"] - away["defense_rating"], 1),
         "stronger_team_by_rating": home_code.upper() if home_rating >= away_rating else away_code.upper(),
         "stronger_team_by_value": home_code.upper() if home["total_value_eur"] >= away["total_value_eur"] else away_code.upper(),
     }

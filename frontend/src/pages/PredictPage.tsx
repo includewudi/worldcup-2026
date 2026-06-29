@@ -120,6 +120,10 @@ export default function PredictPage() {
             </div>
           </div>
 
+          {prediction.prediction.squad_adjustment?.applied && (
+            <SquadAdjustmentPanel prediction={prediction} />
+          )}
+
           <div className="card lg:col-span-3">
             <h2 className="text-lg font-semibold mb-1">🎯 比分概率 Top 10</h2>
             <p className="text-xs text-slate-500 mb-4">基于 Dixon-Coles 修正泊松模型，按概率降序排列</p>
@@ -197,6 +201,95 @@ function ratingBarClass(r: number | null | undefined): string {
   if (r >= 80) return "bg-gradient-to-r from-blue-600 to-blue-400";
   if (r >= 75) return "bg-gradient-to-r from-green-600 to-green-400";
   return "bg-gradient-to-r from-slate-600 to-slate-400";
+}
+
+function SquadAdjustmentPanel({ prediction }: { prediction: MatchPrediction }) {
+  const sa = prediction.prediction.squad_adjustment!;
+  const ha = sa.home_attack ?? 0;
+  const hd = sa.home_defense ?? 0;
+  const aa = sa.away_attack ?? 0;
+  const ad = sa.away_defense ?? 0;
+
+  const homeEdge = ha - ad;
+  const awayEdge = aa - hd;
+
+  const edgeText = (edge: number) => {
+    if (edge > 3) return "显著占优";
+    if (edge > 1) return "略占优";
+    if (edge > -1) return "势均力敌";
+    if (edge > -3) return "稍处下风";
+    return "明显劣势";
+  };
+  const edgeColor = (edge: number) => {
+    if (edge > 1) return "text-emerald-400";
+    if (edge < -1) return "text-red-400";
+    return "text-slate-400";
+  };
+
+  return (
+    <div className="card lg:col-span-3">
+      <h2 className="text-lg font-semibold mb-1">🧠 攻防分析</h2>
+      <p className="text-xs text-slate-500 mb-4">
+        FC25 攻防能力值已影响预测 · 进攻 vs 对手防守决定进球期望微调
+      </p>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div className="bg-slate-800/50 rounded-lg p-4">
+          <p className="text-xs text-slate-500 mb-2">
+            {prediction.home_team.name_cn} 进攻 vs {prediction.away_team.name_cn} 防守
+          </p>
+          <div className="flex items-center justify-center gap-4">
+            <div className="text-center">
+              <p className="text-[10px] text-slate-500">进攻</p>
+              <p className={clsx("text-2xl font-bold font-mono", ratingTierClass(ha))}>{ha}</p>
+            </div>
+            <span className="text-xl text-slate-600">vs</span>
+            <div className="text-center">
+              <p className="text-[10px] text-slate-500">防守</p>
+              <p className={clsx("text-2xl font-bold font-mono", ratingTierClass(ad))}>{ad}</p>
+            </div>
+          </div>
+          <div className="text-center mt-2">
+            <span className={clsx("text-sm font-medium", edgeColor(homeEdge))}>
+              {edgeText(homeEdge)}
+            </span>
+            <span className={clsx("text-xs font-mono ml-2", sa.home_adj_pct! >= 0 ? "text-emerald-400" : "text-red-400")}>
+              ({sa.home_adj_pct! >= 0 ? "+" : ""}{sa.home_adj_pct}% λ)
+            </span>
+          </div>
+        </div>
+
+        <div className="bg-slate-800/50 rounded-lg p-4">
+          <p className="text-xs text-slate-500 mb-2">
+            {prediction.away_team.name_cn} 进攻 vs {prediction.home_team.name_cn} 防守
+          </p>
+          <div className="flex items-center justify-center gap-4">
+            <div className="text-center">
+              <p className="text-[10px] text-slate-500">进攻</p>
+              <p className={clsx("text-2xl font-bold font-mono", ratingTierClass(aa))}>{aa}</p>
+            </div>
+            <span className="text-xl text-slate-600">vs</span>
+            <div className="text-center">
+              <p className="text-[10px] text-slate-500">防守</p>
+              <p className={clsx("text-2xl font-bold font-mono", ratingTierClass(hd))}>{hd}</p>
+            </div>
+          </div>
+          <div className="text-center mt-2">
+            <span className={clsx("text-sm font-medium", edgeColor(awayEdge))}>
+              {edgeText(awayEdge)}
+            </span>
+            <span className={clsx("text-xs font-mono ml-2", sa.away_adj_pct! >= 0 ? "text-emerald-400" : "text-red-400")}>
+              ({sa.away_adj_pct! >= 0 ? "+" : ""}{sa.away_adj_pct}% λ)
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-slate-800/30 rounded-lg p-3 text-center text-xs text-slate-400">
+        进攻强遇到防守弱 → 进球期望 ↑ · 防守强遇到进攻弱 → 进球期望 ↓
+      </div>
+    </div>
+  );
 }
 
 function SquadComparisonPanel({ comparison }: { comparison: SquadComparison }) {
