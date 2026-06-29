@@ -70,6 +70,7 @@ export interface MatchPrediction {
     expected_goals_away: number;
     most_likely_score: number[];
     most_likely_score_prob: number;
+    top_scores: { score: number[]; prob: number }[];
     home_advantage_applied: number;
   };
 }

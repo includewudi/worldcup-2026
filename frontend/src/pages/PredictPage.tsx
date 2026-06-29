@@ -101,18 +101,38 @@ export default function PredictPage() {
           </div>
 
           <div className="card">
-            <h2 className="text-lg font-semibold mb-4">⚽ 预期比分</h2>
-            <div className="text-center py-6">
-              <div className="text-5xl font-bold font-mono text-gold-400">
-                {prediction.prediction.most_likely_score[0]} - {prediction.prediction.most_likely_score[1]}
+            <h2 className="text-lg font-semibold mb-4">⚽ 预期进球</h2>
+            <div className="text-center py-4">
+              <div className="text-4xl font-bold font-mono text-gold-400">
+                {prediction.prediction.expected_goals_home} <span className="text-slate-500 text-2xl">-</span> {prediction.prediction.expected_goals_away}
               </div>
-              <p className="text-sm text-slate-500 mt-2">
-                概率 {(prediction.prediction.most_likely_score_prob * 100).toFixed(1)}%
+              <p className="text-xs text-slate-500 mt-2">
+                主场优势: +{prediction.prediction.home_advantage_applied} Elo
               </p>
-              <div className="mt-4 text-xs text-slate-500 space-y-1">
-                <p>预期进球: {prediction.prediction.expected_goals_home} - {prediction.prediction.expected_goals_away}</p>
-                <p>主场优势: +{prediction.prediction.home_advantage_applied} Elo</p>
-              </div>
+            </div>
+          </div>
+
+          <div className="card lg:col-span-3">
+            <h2 className="text-lg font-semibold mb-1">🎯 比分概率 Top 10</h2>
+            <p className="text-xs text-slate-500 mb-4">基于 Dixon-Coles 修正泊松模型，按概率降序排列</p>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              {prediction.prediction.top_scores?.map((s, i) => {
+                const [h, a] = s.score;
+                const pct = (s.prob * 100).toFixed(1);
+                const isDraw = h === a;
+                const homeWin = h > a;
+                const borderColor = isDraw ? "border-slate-500" : homeWin ? "border-pitch-600" : "border-blue-600";
+                const glow = i === 0 ? "ring-2 ring-gold-400/50" : "";
+                return (
+                  <div key={`${h}-${a}`} className={`border-l-2 ${borderColor} ${glow} bg-slate-800/50 rounded-lg p-3 text-center`}>
+                    <div className="text-2xl font-bold font-mono text-slate-100">{h} - {a}</div>
+                    <div className="text-sm text-gold-400 font-semibold mt-1">{pct}%</div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">
+                      {isDraw ? "平局" : homeWin ? `${prediction.home_team.name_cn}胜` : `${prediction.away_team.name_cn}胜`}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

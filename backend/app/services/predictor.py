@@ -226,6 +226,12 @@ def match_probabilities(home_elo: float, away_elo: float, max_goals: int = 8) ->
             if matrix[h][a] > best_p:
                 best_h, best_a, best_p = h, a, matrix[h][a]
 
+    scorelines = []
+    for h in range(max_goals + 1):
+        for a in range(max_goals + 1):
+            scorelines.append({"score": [h, a], "prob": matrix[h][a]})
+    scorelines.sort(key=lambda x: x["prob"], reverse=True)
+
     return {
         "home_win": round(home_win, 4),
         "draw": round(draw, 4),
@@ -234,6 +240,7 @@ def match_probabilities(home_elo: float, away_elo: float, max_goals: int = 8) ->
         "expected_goals_away": round(lambda_away, 2),
         "most_likely_score": [best_h, best_a],
         "most_likely_score_prob": round(best_p, 4),
+        "top_scores": [{"score": s["score"], "prob": round(s["prob"], 4)} for s in scorelines[:10]],
     }
 
 
