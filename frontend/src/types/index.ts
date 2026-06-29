@@ -131,3 +131,11 @@ export interface KnockoutFixture {
   round: string;
   source: string;
 }
+
+export interface VisitStats {
+  total_visits: number;
+  unique_visitors: number;
+  today: number;
+  last_visit: string | null;
+  daily: Record<string, number>;
+}

@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { Outlet, NavLink, useLocation } from "react-router-dom";
-import { Trophy, Users, Calendar, Target, Dice5, BarChart3, Star, RefreshCw, Crown, Menu, X } from "lucide-react";
+import { Trophy, Users, Calendar, Target, Dice5, BarChart3, Star, RefreshCw, Crown, Menu, X, Eye } from "lucide-react";
 import clsx from "clsx";
 import { useSync } from "@/contexts/SyncContext";
+import { trackVisit, fetchStats } from "@/api";
+import type { VisitStats } from "@/types";
 
 const navItems = [
   { to: "/", label: "总览", icon: Trophy },
@@ -18,10 +20,13 @@ const navItems = [
 export default function AppLayout() {
   const { syncing, lastSync, triggerSync } = useSync();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [stats, setStats] = useState<VisitStats | null>(null);
   const location = useLocation();
 
   useEffect(() => {
     triggerSync();
+    trackVisit();
+    fetchStats().then(setStats).catch(() => {});
   }, []);
 
   // Route change → close mobile sidebar
@@ -109,6 +114,19 @@ export default function AppLayout() {
           ))}
         </nav>
         <div className="p-4 border-t border-slate-800 space-y-2">
+          {stats && (
+            <div className="flex items-center justify-center gap-4 text-xs text-slate-500 pb-2 border-b border-slate-800/50">
+              <span className="flex items-center gap-1" title="总访问 / 独立访客">
+                <Eye size={12} />
+                <span className="text-slate-300 font-semibold">{stats.total_visits}</span>
+                <span className="text-slate-600">/</span>
+                <span className="text-gold-400 font-semibold">{stats.unique_visitors}</span>
+              </span>
+              <span title="今日访问">
+                今日 <span className="text-slate-300 font-semibold">{stats.today}</span>
+              </span>
+            </div>
+          )}
           <button
             onClick={triggerSync}
             disabled={syncing}

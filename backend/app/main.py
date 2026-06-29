@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.services import predictor, sync_service
+from app.services import predictor, sync_service, stats_service
 
 logger = logging.getLogger("wc2026")
 _scheduler: BackgroundScheduler | None = None
@@ -145,6 +145,8 @@ def root():
             "monte_carlo": "/api/simulate?sims=10000",
             "sync": "POST /api/sync/refresh",
             "sync_status": "GET /api/sync/status",
+            "stats_track": "POST /api/stats/track",
+            "stats": "GET /api/stats",
         },
     }
 
@@ -244,6 +246,16 @@ def refresh_results():
 @app.get("/api/sync/status")
 def sync_status():
     return sync_service.get_sync_status()
+
+
+@app.post("/api/stats/track")
+def track_visit(request: Request):
+    return stats_service.record_visit(_client_ip(request), request.url.path)
+
+
+@app.get("/api/stats")
+def get_visit_stats():
+    return stats_service.get_stats()
 
 
 if _serve_frontend:
