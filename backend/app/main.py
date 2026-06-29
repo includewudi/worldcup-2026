@@ -144,7 +144,8 @@ def root():
             "predict_match": "/api/predict/{home_code}/{away_code}",
         "monte_carlo": "/api/simulate?sims=10000",
         "squad": "/api/squad/{team_code}",
-        "squad_compare": "/api/squad/compare/{home}/{away}",
+"squad_compare": "/api/squad/compare/{home}/{away}",
+    "squad_matchups": "/api/squad/matchups/{home}/{away}",
             "sync": "POST /api/sync/refresh",
             "sync_status": "GET /api/sync/status",
             "stats_track": "POST /api/stats/track",
@@ -244,6 +245,14 @@ def get_squad(team_code: str):
 def compare_squads(home_code: str, away_code: str):
     result = squad_service.compare_squads(home_code, away_code)
     if "error" in result:
+        raise HTTPException(404, result["error"])
+    return result
+
+
+@app.get("/api/squad/matchups/{home_code}/{away_code}")
+def squad_matchups(home_code: str, away_code: str):
+    result = squad_service.analyze_matchups(home_code, away_code)
+    if result.get("error"):
         raise HTTPException(404, result["error"])
     return result
 

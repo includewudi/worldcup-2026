@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchTeams, fetchSquadComparison } from "@/api";
-import type { Team, SquadComparison, Player } from "@/types";
+import type { Team, SquadComparison, Player, AttrProfile, KeyPlayers } from "@/types";
 import clsx from "clsx";
 
 const POSITION_STYLES: Record<string, string> = {
@@ -15,6 +15,19 @@ const POSITION_CHIP_COLORS: Record<string, string> = {
   DF: "bg-blue-500/30 text-blue-300",
   MF: "bg-green-500/30 text-green-300",
   FW: "bg-red-500/30 text-red-300",
+};
+
+const ATTR_LABELS: Record<string, string> = {
+  pace: "速度",
+  shooting: "射门",
+  passing: "传球",
+  dribbling: "盘带",
+  defending: "防守",
+  physic: "体格",
+  gk_reflexes: "反应",
+  gk_diving: "扑救",
+  gk_handling: "手控",
+  gk_positioning: "站位",
 };
 
 function formatValue(v: number): string {
@@ -37,6 +50,24 @@ function ratingBarColor(r: number): string {
   if (r >= 80) return "from-blue-500 to-blue-400";
   if (r >= 75) return "from-emerald-500 to-emerald-400";
   return "from-slate-600 to-slate-500";
+}
+
+function attrBarBg(v: number | null | undefined): string {
+  if (v == null) return "bg-slate-800";
+  if (v >= 90) return "bg-amber-400/80";
+  if (v >= 85) return "bg-purple-400/80";
+  if (v >= 80) return "bg-blue-400/80";
+  if (v >= 75) return "bg-emerald-400/80";
+  return "bg-slate-500/80";
+}
+
+function attrTextColor(v: number | null | undefined): string {
+  if (v == null) return "text-slate-600";
+  if (v >= 90) return "text-amber-400";
+  if (v >= 85) return "text-purple-400";
+  if (v >= 80) return "text-blue-400";
+  if (v >= 75) return "text-emerald-400";
+  return "text-slate-400";
 }
 
 function RatingBadge({ rating }: { rating: number | null | undefined }) {
@@ -73,6 +104,184 @@ function ValueBar({ value, max }: { value: number; max: number }) {
   );
 }
 
+function AttrMiniBar({ label, value }: { label: string; value: number | null | undefined }) {
+  if (value == null) return null;
+  return (
+    <div className="flex items-center gap-1 min-w-[56px]">
+      <span className="text-[10px] text-slate-500 w-5 shrink-0">{label}</span>
+      <div className="bg-slate-800 rounded-full h-1.5 overflow-hidden flex-1 min-w-[24px]">
+        <div
+          className={clsx("h-full rounded-full transition-all duration-500", attrBarBg(value))}
+          style={{ width: `${(value / 99) * 100}%` }}
+        />
+      </div>
+      <span className={clsx("text-[10px] font-mono tabular-nums w-5 text-right shrink-0", attrTextColor(value))}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function PlayerAttrRow({ player }: { player: Player }) {
+  if (player.pace == null && player.gk_reflexes == null) return null;
+
+  const isGK = player.position === "GK";
+  const attrs = isGK
+    ? [
+        { key: "gk_reflexes", val: player.gk_reflexes },
+        { key: "gk_diving", val: player.gk_diving },
+        { key: "gk_handling", val: player.gk_handling },
+        { key: "gk_positioning", val: player.gk_positioning },
+      ]
+    : [
+        { key: "pace", val: player.pace },
+        { key: "shooting", val: player.shooting },
+        { key: "passing", val: player.passing },
+        { key: "dribbling", val: player.dribbling },
+        { key: "defending", val: player.defending },
+        { key: "physic", val: player.physic },
+      ];
+
+  return (
+    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 ml-7">
+      {attrs.map((a) => (
+        <AttrMiniBar key={a.key} label={ATTR_LABELS[a.key]} value={a.val} />
+      ))}
+    </div>
+  );
+}
+
+function KeyPlayerBadge({ player, label }: { player: { name: string; position: string; rating?: number | null; pace?: number | null; dribbling?: number | null; defending?: number | null; gk_reflexes?: number | null; finishing?: number | null }; label: string }) {
+  return (
+    <div className="bg-slate-800/50 rounded-lg p-2 flex items-center gap-2">
+      <span className="text-xs text-slate-500 shrink-0 w-12">{label}</span>
+      <div className="flex items-center gap-1.5 min-w-0">
+        <span className={clsx("badge border text-[10px] shrink-0", POSITION_STYLES[player.position] || "bg-slate-700 text-slate-300")}>
+          {player.position}
+        </span>
+        <span className="text-sm font-medium truncate">{player.name}</span>
+        {player.rating != null && (
+          <span className={clsx("text-xs font-mono font-bold shrink-0", ratingTierColor(player.rating))}>
+            {player.rating}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TeamAttrProfile({ label, profile }: { label: string; profile: AttrProfile | Partial<AttrProfile> | undefined }) {
+  if (!profile) return null;
+  const keys: (keyof AttrProfile)[] = ["pace", "shooting", "passing", "dribbling", "defending", "physic"];
+  return (
+    <div className="bg-slate-800/40 rounded-lg p-3">
+      <p className="text-xs text-slate-500 mb-2">{label}</p>
+      <div className="space-y-1.5">
+        {keys.map((k) => {
+          const v = profile[k];
+          if (v == null) return null;
+          return (
+            <div key={k} className="flex items-center gap-2">
+              <span className="text-[10px] text-slate-500 w-6 shrink-0">{ATTR_LABELS[k]}</span>
+              <div className="bg-slate-800 rounded-full h-2 overflow-hidden flex-1">
+                <div
+                  className={clsx("h-full rounded-full transition-all duration-700", attrBarBg(v))}
+                  style={{ width: `${(v / 99) * 100}%` }}
+                />
+              </div>
+              <span className={clsx("text-xs font-mono tabular-nums w-7 text-right shrink-0", attrTextColor(v))}>
+                {v.toFixed(1)}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function KeyPlayersSection({ keyPlayers }: { keyPlayers: KeyPlayers }) {
+  const entries: { label: string; player: typeof keyPlayers.fastest_forward }[] = [
+    { label: "最快前锋", player: keyPlayers.fastest_forward },
+    { label: "最佳射手", player: keyPlayers.best_shooter },
+    { label: "盘带王", player: keyPlayers.best_dribbler },
+    { label: "最快后卫", player: keyPlayers.fastest_defender },
+    { label: "最佳后卫", player: keyPlayers.best_defender },
+    { label: "门将", player: keyPlayers.goalkeeper },
+  ];
+
+  const visible = entries.filter((e) => e.player != null);
+  if (visible.length === 0) return null;
+
+  return (
+    <div className="card">
+      <h2 className="text-lg font-semibold mb-4">🌟 核心球员</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+        {visible.map((e) => (
+          <KeyPlayerBadge key={e.label} player={e.player!} label={e.label} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AttrProfileSection({ squad }: { squad: SquadComparison["home"] }) {
+  if (!squad.attack_profile && !squad.defense_profile) return null;
+
+  return (
+    <div className="card">
+      <h2 className="text-lg font-semibold mb-4">📈 队伍属性画像 (FC26)</h2>
+
+      {(squad.attack_rating != null || squad.defense_rating != null) && (
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          {squad.attack_rating != null && (
+            <div className="bg-slate-800/50 rounded-lg p-3 text-center">
+              <p className="text-[10px] text-slate-500 mb-1">进攻评分</p>
+              <p className={clsx("text-xl font-bold font-mono", ratingTierColor(squad.attack_rating))}>
+                {squad.attack_rating.toFixed(1)}
+              </p>
+            </div>
+          )}
+          {squad.defense_rating != null && (
+            <div className="bg-slate-800/50 rounded-lg p-3 text-center">
+              <p className="text-[10px] text-slate-500 mb-1">防守评分</p>
+              <p className={clsx("text-xl font-bold font-mono", ratingTierColor(squad.defense_rating))}>
+                {squad.defense_rating.toFixed(1)}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {squad.net_rating != null && (
+        <div className="text-center mb-4">
+          <span className={clsx(
+            "text-sm font-bold font-mono px-3 py-1 rounded-full",
+            squad.net_rating > 0
+              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+              : squad.net_rating < 0
+                ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                : "bg-slate-700/50 text-slate-400 border border-slate-600/30"
+          )}>
+            攻防净值: {squad.net_rating > 0 ? "+" : ""}{squad.net_rating.toFixed(1)}
+          </span>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <TeamAttrProfile label="进攻属性" profile={squad.attack_profile} />
+        <TeamAttrProfile label="防守属性" profile={squad.defense_profile} />
+      </div>
+
+      {squad.attr_coverage_pct != null && squad.attr_coverage_pct < 30 && (
+        <p className="text-xs text-slate-600 mt-3 text-center">
+          属性覆盖率仅 {squad.attr_coverage_pct.toFixed(0)}%，数据可能不完整
+        </p>
+      )}
+    </div>
+  );
+}
+
 type SortMode = "rating" | "value";
 
 function TeamSquadTable({ squad, sortMode }: { squad: SquadComparison["home"]; sortMode: SortMode }) {
@@ -90,6 +299,11 @@ function TeamSquadTable({ squad, sortMode }: { squad: SquadComparison["home"]; s
             <span className="ml-2 text-slate-600">
               FC25 {Math.round(squad.rating_coverage_pct * 100) / 100}%
             </span>
+            {squad.attr_coverage_pct != null && (
+              <span className="ml-2 text-slate-600">
+                FC26 {squad.attr_coverage_pct.toFixed(0)}%
+              </span>
+            )}
           </p>
         </div>
       </div>
@@ -149,7 +363,12 @@ function TeamSquadTable({ squad, sortMode }: { squad: SquadComparison["home"]; s
                 )}
               >
                 <td className="py-2 px-1.5 text-slate-600 font-mono">{i + 1}</td>
-                <td className="py-2 px-1.5 font-medium truncate max-w-[180px]">{p.name}</td>
+                <td className="py-2 px-1.5">
+                  <div className="flex flex-col">
+                    <span className="font-medium truncate max-w-[180px]">{p.name}</span>
+                    <PlayerAttrRow player={p} />
+                  </div>
+                </td>
                 <td className="py-2 px-1.5">
                   <span className={clsx("badge border text-xs", POSITION_STYLES[p.position] || "bg-slate-700 text-slate-300")}>
                     {p.position}
@@ -391,6 +610,12 @@ export default function SquadPage() {
           <RatingComparisonCard comparison={comparison} />
 
           <ValueComparisonCard comparison={comparison} />
+
+          {comparison.home.attack_profile && <AttrProfileSection squad={comparison.home} />}
+          {comparison.away.attack_profile && <AttrProfileSection squad={comparison.away} />}
+
+          {comparison.home.key_players && <KeyPlayersSection keyPlayers={comparison.home.key_players} />}
+          {comparison.away.key_players && <KeyPlayersSection keyPlayers={comparison.away.key_players} />}
 
           <div className="flex justify-center">
             <div className="inline-flex bg-slate-800 rounded-lg p-1 gap-1">

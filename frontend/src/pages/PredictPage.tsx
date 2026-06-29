@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchTeams, fetchPrediction, fetchSquadComparison } from "@/api";
-import type { Team, MatchPrediction, SquadComparison } from "@/types";
+import type { Team, MatchPrediction, SquadComparison, Matchup, MatchupAnalysis } from "@/types";
 import { ChevronRight } from "lucide-react";
 import clsx from "clsx";
 
@@ -150,6 +150,14 @@ export default function PredictPage() {
         </div>
       )}
 
+      {prediction?.prediction.key_matchups && (
+        <KeyMatchupsPanel
+          matchups={prediction.prediction.key_matchups}
+          homeName={prediction.home_team.name_cn}
+          awayName={prediction.away_team.name_cn}
+        />
+      )}
+
       {squadCmp && (
         <SquadComparisonPanel comparison={squadCmp} />
       )}
@@ -201,6 +209,120 @@ function ratingBarClass(r: number | null | undefined): string {
   if (r >= 80) return "bg-gradient-to-r from-blue-600 to-blue-400";
   if (r >= 75) return "bg-gradient-to-r from-green-600 to-green-400";
   return "bg-gradient-to-r from-slate-600 to-slate-400";
+}
+
+function matchupAdvBg(advantage: Matchup["advantage"]): string {
+  switch (advantage) {
+    case "home": return "bg-blue-500/10 border-blue-500/20";
+    case "away": return "bg-red-500/10 border-red-500/20";
+    default: return "bg-slate-800/30 border-slate-700/20";
+  }
+}
+
+function matchupAdvValueClass(advantage: Matchup["advantage"]): string {
+  switch (advantage) {
+    case "home": return "text-blue-400";
+    case "away": return "text-red-400";
+    default: return "text-slate-400";
+  }
+}
+
+function matchupAdvValueBg(advantage: Matchup["advantage"]): string {
+  switch (advantage) {
+    case "home": return "bg-blue-500/15";
+    case "away": return "bg-red-500/15";
+    default: return "bg-slate-700/15";
+  }
+}
+
+function MatchupCard({ matchup }: { matchup: Matchup }) {
+  return (
+    <div className={clsx("rounded-xl border p-3", matchupAdvBg(matchup.advantage))}>
+      <p className="text-sm font-medium mb-2">{matchup.title}</p>
+
+      <div className="flex items-center gap-2 mb-2">
+        <div className="flex-1 min-w-0 text-right">
+          <p className="text-sm font-medium truncate">{matchup.home_player.name}</p>
+          <p className={clsx("text-lg font-bold font-mono tabular-nums", matchupAdvValueClass(matchup.advantage))}>
+            {matchup.home_value}
+          </p>
+        </div>
+
+        <div className="shrink-0 flex flex-col items-center">
+          <span className={clsx(
+            "text-xs font-bold px-2.5 py-0.5 rounded-full",
+            matchupAdvValueBg(matchup.advantage),
+            matchupAdvValueClass(matchup.advantage)
+          )}>
+            VS
+          </span>
+        </div>
+
+        <div className="flex-1 min-w-0 text-left">
+          <p className="text-sm font-medium truncate">{matchup.away_player.name}</p>
+          <p className={clsx("text-lg font-bold font-mono tabular-nums", matchupAdvValueClass(matchup.advantage === "home" ? "away" : matchup.advantage === "away" ? "home" : "even"))}>
+            {matchup.away_value}
+          </p>
+        </div>
+      </div>
+
+      {matchup.description && (
+        <p className="text-[11px] text-slate-500 leading-relaxed">{matchup.description}</p>
+      )}
+    </div>
+  );
+}
+
+function KeyMatchupsPanel({ matchups, homeName, awayName }: { matchups: MatchupAnalysis; homeName: string; awayName: string }) {
+  if (!matchups.available || !matchups.matchups?.length) {
+    if (matchups.reason) {
+      return (
+        <div className="card">
+          <h2 className="text-lg font-semibold mb-2">⚔️ 关键对决</h2>
+          <p className="text-sm text-slate-500">{matchups.reason}</p>
+        </div>
+      );
+    }
+    return null;
+  }
+
+  const summary = matchups.summary;
+
+  return (
+    <div className="card">
+      <h2 className="text-lg font-semibold mb-1">⚔️ 关键对决</h2>
+      <p className="text-xs text-slate-500 mb-4">
+        {homeName} vs {awayName} · 核心球员属性对比
+      </p>
+
+      {summary && (
+        <div className="flex items-center justify-center gap-4 mb-4 p-3 bg-slate-800/50 rounded-lg">
+          <div className="text-center">
+            <span className="text-[10px] text-slate-500 block">{homeName}</span>
+            <span className="text-lg font-bold font-mono text-blue-400">{summary.home_advantages}</span>
+            <span className="text-[10px] text-slate-500 block">占优</span>
+          </div>
+          <div className="w-px h-8 bg-slate-700" />
+          <div className="text-center">
+            <span className="text-[10px] text-slate-500 block">势均力敌</span>
+            <span className="text-lg font-bold font-mono text-slate-400">{summary.even}</span>
+          </div>
+          <div className="w-px h-8 bg-slate-700" />
+          <div className="text-center">
+            <span className="text-[10px] text-slate-500 block">{awayName}</span>
+            <span className="text-lg font-bold font-mono text-red-400">{summary.away_advantages}</span>
+            <span className="text-[10px] text-slate-500 block">占优</span>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {matchups.matchups.map((m, i) => (
+          <MatchupCard key={i} matchup={m} />
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function SquadAdjustmentPanel({ prediction }: { prediction: MatchPrediction }) {

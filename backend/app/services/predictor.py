@@ -179,6 +179,28 @@ def _get_squad_strengths(code: str) -> Optional[dict]:
     }
 
 
+_MATCHUP_ADJUSTMENT_WEIGHT = 0.05
+
+
+def _get_key_matchups(home_code: str, away_code: str) -> dict:
+    try:
+        from app.services.squad_service import analyze_matchups
+    except ImportError:
+        return {"available": False}
+    result = analyze_matchups(home_code, away_code)
+    if not result.get("available"):
+        return {"available": False, "reason": result.get("reason", "unknown")}
+    return {
+        "available": True,
+        "matchups": result["matchups"],
+        "summary": result["summary"],
+        "home_attack_profile": result.get("home_attack_profile", {}),
+        "away_attack_profile": result.get("away_attack_profile", {}),
+        "home_defense_profile": result.get("home_defense_profile", {}),
+        "away_defense_profile": result.get("away_defense_profile", {}),
+    }
+
+
 def expected_goals_adjusted(
     home_elo: float,
     away_elo: float,
@@ -337,6 +359,8 @@ def predict_match(home_code: str, away_code: str) -> dict:
         probs.pop("_adj_a", None)
     else:
         probs["squad_adjustment"] = {"applied": False}
+
+    probs["key_matchups"] = _get_key_matchups(home_code, away_code)
 
     return {
         "home_team": {"code": home["code"], "name": home["name"], "name_cn": home["name_cn"], "elo": home["elo_rating"]},

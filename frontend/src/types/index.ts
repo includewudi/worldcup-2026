@@ -81,6 +81,7 @@ export interface MatchPrediction {
       home_adj_pct?: number;
       away_adj_pct?: number;
     };
+    key_matchups?: MatchupAnalysis;
   };
 }
 
@@ -156,12 +157,87 @@ export interface Player {
   age: number | null;
   value_eur: number;
   rating?: number | null;
-  fc_position?: string | null;
+  fc_overall?: number | null;
   pace?: number | null;
   shooting?: number | null;
   passing?: number | null;
+  dribbling?: number | null;
   defending?: number | null;
-  physical?: number | null;
+  physic?: number | null;
+  sprint_speed?: number | null;
+  acceleration?: number | null;
+  finishing?: number | null;
+  heading?: number | null;
+  standing_tackle?: number | null;
+  marking?: number | null;
+  gk_diving?: number | null;
+  gk_handling?: number | null;
+  gk_reflexes?: number | null;
+  gk_positioning?: number | null;
+}
+
+export interface KeyPlayer {
+  name: string;
+  position: string;
+  rating?: number | null;
+  pace?: number | null;
+  shooting?: number | null;
+  dribbling?: number | null;
+  defending?: number | null;
+  physic?: number | null;
+  finishing?: number | null;
+  heading?: number | null;
+  standing_tackle?: number | null;
+  gk_reflexes?: number | null;
+  gk_diving?: number | null;
+}
+
+export interface AttrProfile {
+  pace: number;
+  shooting: number;
+  passing: number;
+  dribbling: number;
+  defending: number;
+  physic: number;
+}
+
+export interface KeyPlayers {
+  fastest_forward?: KeyPlayer | null;
+  best_shooter?: KeyPlayer | null;
+  best_dribbler?: KeyPlayer | null;
+  best_header_forward?: KeyPlayer | null;
+  fastest_defender?: KeyPlayer | null;
+  best_defender?: KeyPlayer | null;
+  best_header_defender?: KeyPlayer | null;
+  goalkeeper?: KeyPlayer | null;
+}
+
+export interface Matchup {
+  title: string;
+  home_player: KeyPlayer;
+  away_player: KeyPlayer;
+  home_value: number;
+  away_value: number;
+  differential: number | null;
+  advantage: "home" | "away" | "even";
+  description: string;
+}
+
+export interface MatchupAnalysis {
+  available: boolean;
+  reason?: string;
+  home_code?: string;
+  away_code?: string;
+  matchups?: Matchup[];
+  summary?: {
+    home_advantages: number;
+    away_advantages: number;
+    even: number;
+  };
+  home_attack_profile?: AttrProfile;
+  away_attack_profile?: AttrProfile;
+  home_defense_profile?: AttrProfile;
+  away_defense_profile?: AttrProfile;
 }
 
 export interface SquadSummary {
@@ -173,6 +249,13 @@ export interface SquadSummary {
   avg_value_eur: number;
   avg_rating: number;
   rating_coverage_pct: number;
+  attr_coverage_pct?: number;
+  attack_rating?: number;
+  defense_rating?: number;
+  net_rating?: number;
+  attack_profile?: AttrProfile;
+  defense_profile?: Partial<AttrProfile>;
+  key_players?: KeyPlayers;
   top_player: string;
   position_breakdown: Record<string, number>;
   top_players_by_rating: Player[];
@@ -184,6 +267,8 @@ export interface SquadComparison {
   away: SquadSummary;
   value_gap_eur: number;
   rating_gap: number;
+  attack_gap?: number;
+  defense_gap?: number;
   stronger_team_by_rating: string;
   stronger_team_by_value: string;
 }
