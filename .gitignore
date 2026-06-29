@@ -10,3 +10,4 @@ venv/
 .env
 .env.local
 backend/static/
+backend/app/data/stats.json
