@@ -1,7 +1,7 @@
-"""Player squad data service — loads players.json and provides squad queries."""
 import json
 from pathlib import Path
 from typing import Optional
+from collections import Counter
 
 _data_dir = Path(__file__).parent.parent / "data"
 _players_cache: Optional[dict] = None
@@ -28,9 +28,16 @@ def get_squad_summary(team_code: str, limit: int = 11) -> Optional[dict]:
     if not squad:
         return None
     players = squad["players"]
+
+    rated = [p for p in players if p.get("rating")]
+    avg_rating = round(sum(p["rating"] for p in rated) / len(rated), 1) if rated else 0
+    coverage_pct = round(len(rated) / len(players) * 100) if players else 0
+
+    top_by_rating = sorted(rated, key=lambda x: -x["rating"])[:limit]
     top_by_value = sorted(players, key=lambda x: -x.get("value_eur", 0))[:limit]
-    from collections import Counter
+
     pos_counts = Counter(p["position"] for p in players)
+
     return {
         "team_code": team_code.upper(),
         "team_name": squad["name"],
@@ -38,9 +45,12 @@ def get_squad_summary(team_code: str, limit: int = 11) -> Optional[dict]:
         "player_count": squad["player_count"],
         "total_value_eur": squad["total_value"],
         "avg_value_eur": squad["total_value"] // max(squad["player_count"], 1),
+        "avg_rating": avg_rating,
+        "rating_coverage_pct": coverage_pct,
         "top_player": squad["top_player"],
         "position_breakdown": dict(pos_counts),
-        "top_players": top_by_value,
+        "top_players_by_rating": top_by_rating,
+        "top_players_by_value": top_by_value,
     }
 
 
@@ -51,9 +61,15 @@ def compare_squads(home_code: str, away_code: str) -> dict:
         return {"error": f"Team not found: {home_code}"}
     if not away:
         return {"error": f"Team not found: {away_code}"}
+
+    home_rating = home["avg_rating"]
+    away_rating = away["avg_rating"]
+
     return {
         "home": home,
         "away": away,
         "value_gap_eur": home["total_value_eur"] - away["total_value_eur"],
-        "stronger_team": home_code.upper() if home["total_value_eur"] >= away["total_value_eur"] else away_code.upper(),
+        "rating_gap": round(home_rating - away_rating, 1),
+        "stronger_team_by_rating": home_code.upper() if home_rating >= away_rating else away_code.upper(),
+        "stronger_team_by_value": home_code.upper() if home["total_value_eur"] >= away["total_value_eur"] else away_code.upper(),
     }

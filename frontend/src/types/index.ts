@@ -146,6 +146,13 @@ export interface Player {
   club: string;
   age: number | null;
   value_eur: number;
+  rating?: number | null;
+  fc_position?: string | null;
+  pace?: number | null;
+  shooting?: number | null;
+  passing?: number | null;
+  defending?: number | null;
+  physical?: number | null;
 }
 
 export interface SquadSummary {
@@ -155,14 +162,19 @@ export interface SquadSummary {
   player_count: number;
   total_value_eur: number;
   avg_value_eur: number;
+  avg_rating: number;
+  rating_coverage_pct: number;
   top_player: string;
   position_breakdown: Record<string, number>;
-  top_players: Player[];
+  top_players_by_rating: Player[];
+  top_players_by_value: Player[];
 }
 
 export interface SquadComparison {
   home: SquadSummary;
   away: SquadSummary;
   value_gap_eur: number;
-  stronger_team: string;
+  rating_gap: number;
+  stronger_team_by_rating: string;
+  stronger_team_by_value: string;
 }

@@ -181,31 +181,55 @@ function formatSquadValue(v: number): string {
   return `€${v}`;
 }
 
+function ratingTierClass(r: number | null | undefined): string {
+  if (!r) return "text-slate-600";
+  if (r >= 90) return "text-gold-400";
+  if (r >= 85) return "text-purple-400";
+  if (r >= 80) return "text-blue-400";
+  if (r >= 75) return "text-green-400";
+  return "text-slate-400";
+}
+
+function ratingBarClass(r: number | null | undefined): string {
+  if (!r) return "bg-slate-700";
+  if (r >= 90) return "bg-gradient-to-r from-gold-600 to-gold-400";
+  if (r >= 85) return "bg-gradient-to-r from-purple-600 to-purple-400";
+  if (r >= 80) return "bg-gradient-to-r from-blue-600 to-blue-400";
+  if (r >= 75) return "bg-gradient-to-r from-green-600 to-green-400";
+  return "bg-gradient-to-r from-slate-600 to-slate-400";
+}
+
 function SquadComparisonPanel({ comparison }: { comparison: SquadComparison }) {
-  const homeTop5 = comparison.home.top_players.slice(0, 5);
-  const awayTop5 = comparison.away.top_players.slice(0, 5);
-  const allVals = [...homeTop5, ...awayTop5].map((p) => p.value_eur);
-  const maxVal = Math.max(...allVals, 1);
+  const homeTop5 = comparison.home.top_players_by_rating.slice(0, 5);
+  const awayTop5 = comparison.away.top_players_by_rating.slice(0, 5);
+  const allRatings = [...homeTop5, ...awayTop5].map((p) => p.rating ?? 0);
+  const maxRating = Math.max(...allRatings, 99);
 
   return (
     <div className="card">
       <h2 className="text-lg font-semibold mb-1">⚔️ 阵容对比</h2>
-      <p className="text-xs text-slate-500 mb-4">基于球员身价与阵容深度</p>
+      <p className="text-xs text-slate-500 mb-4">FC25 能力值 · {comparison.home.rating_coverage_pct}%/{comparison.away.rating_coverage_pct}% 球员有评分</p>
 
-      <div className="grid grid-cols-2 gap-4 mb-4">
+      <div className="grid grid-cols-2 gap-4 mb-3">
         <div className="bg-slate-800/50 rounded-lg p-3 text-center">
           <p className="text-xs text-slate-500 mb-1">{comparison.home.team_name_cn}</p>
-          <p className="text-lg font-bold font-mono text-pitch-400">{formatSquadValue(comparison.home.total_value_eur)}</p>
+          <p className={clsx("text-2xl font-bold font-mono", ratingTierClass(comparison.home.avg_rating))}>{comparison.home.avg_rating || "-"}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">平均能力值</p>
         </div>
         <div className="bg-slate-800/50 rounded-lg p-3 text-center">
           <p className="text-xs text-slate-500 mb-1">{comparison.away.team_name_cn}</p>
-          <p className="text-lg font-bold font-mono text-blue-400">{formatSquadValue(comparison.away.total_value_eur)}</p>
+          <p className={clsx("text-2xl font-bold font-mono", ratingTierClass(comparison.away.avg_rating))}>{comparison.away.avg_rating || "-"}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">平均能力值</p>
         </div>
       </div>
 
       <div className="text-center mb-4">
-        <span className="text-xs text-slate-500">身价差距 </span>
-        <span className="text-sm font-bold font-mono text-gold-400">{formatSquadValue(Math.abs(comparison.value_gap_eur))}</span>
+        <span className="text-xs text-slate-500">能力值差距 </span>
+        <span className={clsx("text-sm font-bold font-mono", comparison.rating_gap >= 0 ? "text-pitch-400" : "text-blue-400")}>
+          {comparison.rating_gap >= 0 ? "+" : ""}{comparison.rating_gap}
+        </span>
+        <span className="text-xs text-slate-500 ml-2">| 身价差 </span>
+        <span className="text-xs font-mono text-gold-400">{formatSquadValue(Math.abs(comparison.value_gap_eur))}</span>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -219,9 +243,9 @@ function SquadComparisonPanel({ comparison }: { comparison: SquadComparison }) {
                 <div key={p.name} className="flex items-center gap-2 text-sm">
                   <span className={clsx("badge border shrink-0", POS_STYLE[p.position] || "bg-slate-700 text-slate-300")}>{p.position}</span>
                   <span className="flex-1 truncate font-medium">{p.name}</span>
-                  <span className="font-mono text-xs text-gold-400 shrink-0">{formatSquadValue(p.value_eur)}</span>
-                  <div className="bg-slate-800 rounded-full h-1.5 overflow-hidden w-16 shrink-0">
-                    <div className="bg-gradient-to-r from-gold-500 to-gold-400 h-full rounded-full" style={{ width: `${(p.value_eur / maxVal) * 100}%` }} />
+                  <span className={clsx("font-mono text-sm font-bold shrink-0 w-7 text-right", ratingTierClass(p.rating))}>{p.rating ?? "-"}</span>
+                  <div className="bg-slate-800 rounded-full h-1.5 overflow-hidden w-14 shrink-0">
+                    <div className={clsx("h-full rounded-full", ratingBarClass(p.rating))} style={{ width: `${((p.rating ?? 0) / maxRating) * 100}%` }} />
                   </div>
                 </div>
               ))}
