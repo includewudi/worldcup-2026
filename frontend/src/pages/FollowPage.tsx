@@ -1,9 +1,25 @@
 import { useEffect, useState, useMemo } from "react";
-import { fetchTeams, fetchFixtures } from "@/api";
-import type { Team, Fixture } from "@/types";
+import { fetchTeams, fetchFixtures, fetchKnockout } from "@/api";
+import type { Team, Fixture, KnockoutFixture } from "@/types";
 import { Star, Search, Download, Trash2, Calendar, MapPin, Clock } from "lucide-react";
 
 const STORAGE_KEY = "wc2026-followed-teams";
+
+function knockoutToFixture(ko: KnockoutFixture, index: number): Fixture {
+  return {
+    id: 10000 + index,
+    group: ko.round || "淘汰赛",
+    date: ko.date,
+    time_utc: ko.utc_time || "00:00",
+    home: ko.home_abbr,
+    away: ko.away_abbr,
+    venue: ko.venue,
+    city: ko.city,
+    played: ko.played,
+    home_score: ko.home_score ?? undefined,
+    away_score: ko.away_score ?? undefined,
+  };
+}
 
 function loadFollowed(): string[] {
   try {
@@ -68,6 +84,7 @@ function buildICS(fixtures: Fixture[], teamMap: Map<string, Team>): string {
       ? `已结束 ${fx.home_score}-${fx.away_score}`
       : "即将开始";
     const uid = `wc2026-match-${fx.id}@worldcup2026`;
+    const stageLabel = /^[A-L]$/.test(fx.group) ? `${fx.group}组` : fx.group;
 
     lines.push(
       "BEGIN:VEVENT",
@@ -75,7 +92,7 @@ function buildICS(fixtures: Fixture[], teamMap: Map<string, Team>): string {
       `DTSTAMP:${formatICSDate(new Date())}`,
       `DTSTART:${formatICSDate(start)}`,
       `DTEND:${formatICSDate(end)}`,
-      `SUMMARY:${title} (世界杯${fx.group}组)`,
+      `SUMMARY:${title} (世界杯${stageLabel})`,
       `DESCRIPTION:${desc}`,
       `LOCATION:${fx.venue}, ${fx.city}`,
       "BEGIN:VALARM",
@@ -111,7 +128,10 @@ export default function FollowPage() {
 
   useEffect(() => {
     fetchTeams().then(setAllTeams);
-    fetchFixtures().then(setAllFixtures);
+    Promise.all([fetchFixtures(), fetchKnockout()]).then(([groupFx, koFx]) => {
+      const koAsFixtures: Fixture[] = koFx.map((ko, i) => knockoutToFixture(ko, i));
+      setAllFixtures([...groupFx, ...koAsFixtures]);
+    });
   }, []);
 
   const teamMap = useMemo(() => {
@@ -283,8 +303,10 @@ export default function FollowPage() {
                   )}
                 </div>
 
-                <span className="badge bg-slate-800 text-slate-400 text-xs w-12 justify-center">
-                  {fx.group}组
+                <span className={`badge bg-slate-800 text-slate-400 text-xs min-w-[3rem] text-center ${
+                  /^[A-L]$/.test(fx.group) ? "" : "text-gold-400"
+                }`}>
+                  {/^[A-L]$/.test(fx.group) ? `${fx.group}组` : fx.group}
                 </span>
 
                 <div className="flex-1 flex items-center justify-end gap-2">
