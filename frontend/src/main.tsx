@@ -11,6 +11,7 @@ import SimulationPage from "@/pages/SimulationPage";
 import FollowPage from "@/pages/FollowPage";
 import StandingsPage from "@/pages/StandingsPage";
 import KnockoutPage from "@/pages/KnockoutPage";
+import SquadPage from "@/pages/SquadPage";
 import "@/index.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
@@ -24,6 +25,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="/standings" element={<StandingsPage />} />
             <Route path="/knockout" element={<KnockoutPage />} />
             <Route path="/teams" element={<TeamsPage />} />
+            <Route path="/squad" element={<SquadPage />} />
             <Route path="/fixtures" element={<FixturesPage />} />
             <Route path="/predict" element={<PredictPage />} />
             <Route path="/simulate" element={<SimulationPage />} />

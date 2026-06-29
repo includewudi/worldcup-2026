@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { Team, Fixture, TournamentInfo, MatchPrediction, MonteCarloResponse, StandingsResponse, SyncResult, SyncStatus, KnockoutFixture, VisitStats } from "@/types";
+import type { Team, Fixture, TournamentInfo, MatchPrediction, MonteCarloResponse, StandingsResponse, SyncResult, SyncStatus, KnockoutFixture, VisitStats, SquadSummary, SquadComparison } from "@/types";
 
 const baseURL = import.meta.env.VITE_API_BASE || "/api";
 const api = axios.create({ baseURL, timeout: 15000 });
@@ -117,5 +117,19 @@ export async function trackVisit(): Promise<void> {
 
 export async function fetchStats(): Promise<VisitStats> {
   const { data } = await api.get("/stats");
+  return data;
+}
+
+export async function fetchSquad(teamCode: string): Promise<SquadSummary> {
+  const { data } = await fetchWithCache(`squad-${teamCode}`, () =>
+    api.get(`/squad/${teamCode}`).then(r => r.data)
+  );
+  return data;
+}
+
+export async function fetchSquadComparison(homeCode: string, awayCode: string): Promise<SquadComparison> {
+  const { data } = await fetchWithCache(`squad-cmp-${homeCode}-${awayCode}`, () =>
+    api.get(`/squad/compare/${homeCode}/${awayCode}`).then(r => r.data)
+  );
   return data;
 }

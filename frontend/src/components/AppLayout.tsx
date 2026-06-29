@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Outlet, NavLink, useLocation } from "react-router-dom";
-import { Trophy, Users, Calendar, Target, Dice5, BarChart3, Star, RefreshCw, Crown, Menu, X, Eye } from "lucide-react";
+import { Trophy, Users, Calendar, Target, Dice5, BarChart3, Star, RefreshCw, Crown, Menu, X, Eye, Shield } from "lucide-react";
 import clsx from "clsx";
 import { useSync } from "@/contexts/SyncContext";
 import { trackVisit, fetchStats } from "@/api";
@@ -12,6 +12,7 @@ const navItems = [
   { to: "/standings", label: "积分榜", icon: BarChart3 },
   { to: "/knockout", label: "淘汰赛", icon: Crown },
   { to: "/teams", label: "队伍", icon: Users },
+  { to: "/squad", label: "阵容", icon: Shield },
   { to: "/fixtures", label: "赛程", icon: Calendar },
   { to: "/predict", label: "对阵预测", icon: Target },
   { to: "/simulate", label: "赛事模拟", icon: Dice5 },

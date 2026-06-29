@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { fetchTeams, fetchPrediction } from "@/api";
-import type { Team, MatchPrediction } from "@/types";
+import { fetchTeams, fetchPrediction, fetchSquadComparison } from "@/api";
+import type { Team, MatchPrediction, SquadComparison } from "@/types";
 import { ChevronRight } from "lucide-react";
+import clsx from "clsx";
 
 export default function PredictPage() {
   const [teams, setTeams] = useState<Team[]>([]);
@@ -9,6 +10,7 @@ export default function PredictPage() {
   const [awayCode, setAwayCode] = useState("ARG");
   const [prediction, setPrediction] = useState<MatchPrediction | null>(null);
   const [loading, setLoading] = useState(false);
+  const [squadCmp, setSquadCmp] = useState<SquadComparison | null>(null);
 
   useEffect(() => {
     fetchTeams().then(setTeams);
@@ -25,6 +27,12 @@ export default function PredictPage() {
   useEffect(() => {
     runPrediction();
   }, []);
+
+  useEffect(() => {
+    if (homeCode && awayCode && homeCode !== awayCode) {
+      fetchSquadComparison(homeCode, awayCode).then(setSquadCmp).catch(() => {});
+    }
+  }, [homeCode, awayCode]);
 
   const total = prediction
     ? prediction.prediction.home_win + prediction.prediction.draw + prediction.prediction.away_win || 1
@@ -137,6 +145,10 @@ export default function PredictPage() {
           </div>
         </div>
       )}
+
+      {squadCmp && (
+        <SquadComparisonPanel comparison={squadCmp} />
+      )}
     </div>
   );
 }
@@ -151,6 +163,71 @@ function ProbBar({ label, value, total, color }: { label: string; value: number;
       </div>
       <div className="bg-slate-800 rounded-full h-3 overflow-hidden">
         <div className={`${color} h-full rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+const POS_STYLE: Record<string, string> = {
+  GK: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
+  DF: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+  MF: "bg-green-500/20 text-green-400 border-green-500/30",
+  FW: "bg-red-500/20 text-red-400 border-red-500/30",
+};
+
+function formatSquadValue(v: number): string {
+  if (v >= 1_000_000) return `€${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `€${Math.round(v / 1_000)}K`;
+  return `€${v}`;
+}
+
+function SquadComparisonPanel({ comparison }: { comparison: SquadComparison }) {
+  const homeTop5 = comparison.home.top_players.slice(0, 5);
+  const awayTop5 = comparison.away.top_players.slice(0, 5);
+  const allVals = [...homeTop5, ...awayTop5].map((p) => p.value_eur);
+  const maxVal = Math.max(...allVals, 1);
+
+  return (
+    <div className="card">
+      <h2 className="text-lg font-semibold mb-1">⚔️ 阵容对比</h2>
+      <p className="text-xs text-slate-500 mb-4">基于球员身价与阵容深度</p>
+
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="bg-slate-800/50 rounded-lg p-3 text-center">
+          <p className="text-xs text-slate-500 mb-1">{comparison.home.team_name_cn}</p>
+          <p className="text-lg font-bold font-mono text-pitch-400">{formatSquadValue(comparison.home.total_value_eur)}</p>
+        </div>
+        <div className="bg-slate-800/50 rounded-lg p-3 text-center">
+          <p className="text-xs text-slate-500 mb-1">{comparison.away.team_name_cn}</p>
+          <p className="text-lg font-bold font-mono text-blue-400">{formatSquadValue(comparison.away.total_value_eur)}</p>
+        </div>
+      </div>
+
+      <div className="text-center mb-4">
+        <span className="text-xs text-slate-500">身价差距 </span>
+        <span className="text-sm font-bold font-mono text-gold-400">{formatSquadValue(Math.abs(comparison.value_gap_eur))}</span>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {[homeTop5, awayTop5].map((list, colIdx) => (
+          <div key={colIdx}>
+            <h3 className="text-sm font-semibold text-slate-400 mb-2">
+              {colIdx === 0 ? comparison.home.team_name_cn : comparison.away.team_name_cn} Top 5
+            </h3>
+            <div className="space-y-2">
+              {list.map((p) => (
+                <div key={p.name} className="flex items-center gap-2 text-sm">
+                  <span className={clsx("badge border shrink-0", POS_STYLE[p.position] || "bg-slate-700 text-slate-300")}>{p.position}</span>
+                  <span className="flex-1 truncate font-medium">{p.name}</span>
+                  <span className="font-mono text-xs text-gold-400 shrink-0">{formatSquadValue(p.value_eur)}</span>
+                  <div className="bg-slate-800 rounded-full h-1.5 overflow-hidden w-16 shrink-0">
+                    <div className="bg-gradient-to-r from-gold-500 to-gold-400 h-full rounded-full" style={{ width: `${(p.value_eur / maxVal) * 100}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

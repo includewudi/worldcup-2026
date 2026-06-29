@@ -139,3 +139,30 @@ export interface VisitStats {
   last_visit: string | null;
   daily: Record<string, number>;
 }
+
+export interface Player {
+  name: string;
+  position: string;
+  club: string;
+  age: number | null;
+  value_eur: number;
+}
+
+export interface SquadSummary {
+  team_code: string;
+  team_name: string;
+  team_name_cn: string;
+  player_count: number;
+  total_value_eur: number;
+  avg_value_eur: number;
+  top_player: string;
+  position_breakdown: Record<string, number>;
+  top_players: Player[];
+}
+
+export interface SquadComparison {
+  home: SquadSummary;
+  away: SquadSummary;
+  value_gap_eur: number;
+  stronger_team: string;
+}

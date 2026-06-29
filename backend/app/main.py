@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.services import predictor, sync_service, stats_service
+from app.services import predictor, sync_service, stats_service, squad_service
 
 logger = logging.getLogger("wc2026")
 _scheduler: BackgroundScheduler | None = None
@@ -142,7 +142,9 @@ def root():
             "standings/{group}": "/api/standings/{group}",
             "tournament_info": "/api/tournament",
             "predict_match": "/api/predict/{home_code}/{away_code}",
-            "monte_carlo": "/api/simulate?sims=10000",
+        "monte_carlo": "/api/simulate?sims=10000",
+        "squad": "/api/squad/{team_code}",
+        "squad_compare": "/api/squad/compare/{home}/{away}",
             "sync": "POST /api/sync/refresh",
             "sync_status": "GET /api/sync/status",
             "stats_track": "POST /api/stats/track",
@@ -228,6 +230,22 @@ def predict_match(home_code: str, away_code: str):
     if not predictor.get_team_by_code(away_code):
         raise HTTPException(404, f"Team not found: {away_code}")
     return predictor.predict_match(home_code, away_code)
+
+
+@app.get("/api/squad/{team_code}")
+def get_squad(team_code: str):
+    squad = squad_service.get_squad_summary(team_code)
+    if not squad:
+        raise HTTPException(404, f"Team not found: {team_code}")
+    return squad
+
+
+@app.get("/api/squad/compare/{home_code}/{away_code}")
+def compare_squads(home_code: str, away_code: str):
+    result = squad_service.compare_squads(home_code, away_code)
+    if "error" in result:
+        raise HTTPException(404, result["error"])
+    return result
 
 
 @app.get("/api/simulate")
